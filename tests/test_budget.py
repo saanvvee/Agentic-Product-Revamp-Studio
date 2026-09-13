@@ -284,3 +284,61 @@ def test_each_tier_binds_differently():
 
     # critical: generous, but still refuses everything.
     assert critical > standard
+
+
+# --------------------------------------------------------------------------
+# The low tier's policy meaning, and observability of free rejections
+# --------------------------------------------------------------------------
+
+
+def test_low_tier_is_cheap_investigation_not_no_investigation():
+    """A deliberate policy decision, asserted because the two are very different
+    results tables and the tier's NAME implies the first.
+
+    At 250 ms, low affords telemetry (50), vision (200), and the pair at exactly
+    250, rejecting only audio (350) and manual (400). A low-severity incident
+    gathers two of three sensors and reaches a real verdict -- it does not
+    terminate with zero evidence.
+    """
+    low_ms = Settings().budget.table[Severity.LOW].budget_ms
+    book = ledger(low_ms)
+
+    assert book.affordable_sources(TRIO), "low must afford at least one sensor"
+    assert set(book.affordable_sources(TRIO)) == {T, V}
+    assert book.can_afford((T, V), parallel=False), "the cheap pair must fit"
+    assert not book.can_afford((A,), parallel=False), "audio must be out of reach"
+
+
+def test_low_tier_gathers_then_strands_on_the_expensive_source():
+    """The intended trajectory: investigate cheaply, then stop."""
+    book = ledger(Settings().budget.table[Severity.LOW].budget_ms)
+    for source in (T, V):
+        assert book.request((source,)).admitted
+        book.record((source,), measured_cost_ms=DECLARED_COST_MS[source])
+
+    assert set(book.gathered) == {T, V}
+    assert book.request((A,)).outcome is AdmissionOutcome.REJECTED_COST
+    assert book.remaining_ms == 0
+
+
+def test_duplicate_requests_are_counted_even_though_they_are_free():
+    """A silent no-op is how we would fail to notice the critic re-requesting
+    sources constantly. Non-zero here is a CRITIC BUG, not a budget event."""
+    book = ledger(900)
+    book.request((T,))
+    book.record((T,), measured_cost_ms=50)
+
+    for _ in range(3):
+        book.request((T,))
+
+    assert book.duplicate_requests == 3
+    assert book.steps_used == 1, "duplicates still cost no step"
+    assert book.snapshot()["n_rejected_duplicate"] == 3
+
+
+def test_budget_table_version_is_frozen_and_exported():
+    """Frozen before any eval run. A later change must bump this string, so a
+    results table can never silently refer to a different cost policy."""
+    from core.config import BUDGET_TABLE_VERSION
+
+    assert BUDGET_TABLE_VERSION == "budget-v1"

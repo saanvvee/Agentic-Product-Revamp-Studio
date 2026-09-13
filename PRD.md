@@ -65,6 +65,10 @@
 | 1.5 | Parallel admission all-or-nothing, with **availability logged apart from choice** (S5.5a) | "Prefers sequential under pressure" is orchestrator behaviour OR admission mechanism, and logging only the choice makes them unrecoverable |
 | 1.5 | **Fast path uses the same budget, no exception** (S5.5a) | Its cheapness must be emergent, or cross-path cost comparisons measure different things. v1.4 was silent on the path that handles most incidents |
 | 1.5 | `scripts/check_setup.py` verifies `core.hooksPath` is set | README instructions get skimmed, and the hook is per-clone config git does not distribute -- two of three clones could silently lack it |
+| 1.5 | `low` declared a **cheap-investigation** tier, not a no-investigation tier (S5.5a) | It affords telemetry, vision, and the pair at exactly 250 ms. The two policies give very different results tables and the name implies the first |
+| 1.5 | Budget tiers **frozen as `budget-v1`** before any eval run (S5.5a) | Tuning tiers to make admission fire is necessary; tuning them after seeing results is circular. A version string makes the difference auditable |
+| 1.5 | Duplicate source requests **counted** though they cost nothing (`core/budget.py`) | A free no-op is invisible: a critic re-requesting sources constantly would look like normal operation. Non-zero is a critic bug, not a budget event |
+| 1.5 | **Severity-distribution degeneracy check** added (`eval/severity_health.py`, S12.1) | With binding tiers, triage is load-bearing on the headline result. A 95%-`standard` classifier would make the tier system decorative while every mechanism test still passed |
 
 ---
 
@@ -559,6 +563,67 @@ precisely the mechanism decision 3 instruments. `standard` binds exactly at the
 sequential trio, making exhaustion reachable on a fourth source. `critical` is
 generous but still refuses the exhaustive sweep, so **no tier permits everything**,
 asserted per-severity in `tests/test_budget.py`.
+
+**`low` is a cheap-investigation tier, not a no-investigation tier.** Decided
+deliberately, because the two produce very different results tables and the
+tier name implies the first. At 250 ms it affords telemetry (50), vision (200),
+and the pair at exactly 250, rejecting only audio (350) and manual (400). A
+low-severity incident therefore gathers two of three sensors and reaches a real
+verdict; it does **not** terminate with zero evidence. A no-investigation tier
+would need a budget below 50 ms and a different name.
+
+##### How to state the recalibration honestly in the report
+
+Tuning tiers until admission control fires is necessary, and it is one step away
+from tuning parameters until the results look good. The distinction must be made
+explicitly, so use this wording:
+
+> Budget tiers were calibrated against measured detector latencies so that each
+> severity class admits a distinct subset of evidence-gathering plans. Tiers
+> chosen such that no plan is ever rejected would render admission control inert;
+> tiers chosen post-hoc to produce a favourable result would be circular. We fix
+> tiers before running any evaluation and report them as a design parameter.
+
+**Frozen as `budget-v1` on 14 September 2026, before any evaluation run.**
+`BUDGET_TABLE_VERSION` is stamped into every results table beside
+`reference_rule_version`. Any later change is a documented amendment with a
+version bump -- the same discipline as the fusion rule. **If the tiers move after
+results exist, the finding is worthless.**
+
+##### The methodological point worth putting in the report
+
+The cost model became falsifiable only once PaDiM produced a real latency. The
+placeholder figures were **unfalsifiable by construction**: no measurement existed
+that could have contradicted them, so every branch passed its tests while the
+mechanism could never fire. What caught it was not a test but arithmetic against
+a measured number.
+
+That is a general lesson about this class of system and worth saying out loud: a
+threshold expressed in units nobody has measured yet cannot be wrong, and
+therefore cannot be right either.
+
+##### Triage is now load-bearing on the headline result
+
+A consequence of tiers that bind: **the severity distribution largely determines
+how often admission control fires at all.** If triage labels most incidents
+`standard`, admission rarely binds; if it favours `low`, the parallel path is
+structurally unavailable for most of the set and mass early termination follows.
+
+So triage classification is an input to the headline result, not a routing
+convenience. Two requirements follow:
+
+1. **Log the severity distribution beside every results table**
+   (`eval/severity_health.py`). A results table without it cannot be interpreted,
+   because the same orchestrator produces very different aggregate costs on
+   differently-classified sets.
+2. **Sanity-check for degeneracy at M2.** A triage agent labelling 95% of incidents
+   `standard` would make the tier system decorative again -- subtler than the inert
+   table, because every mechanism would still work and simply never be exercised.
+   Flagged when any tier falls below 10% or exceeds 75% of the set.
+
+Deliberately a **report**, not a gate. Forcing a target distribution would mean
+tuning triage to produce a convenient spread, which is the same circularity the
+frozen tiers avoid.
 
 ### 5.6 Three paths, specified
 

@@ -177,6 +177,20 @@ class BudgetLedger:
         return tuple(self._debits)
 
     @property
+    def duplicate_requests(self) -> int:
+        """How many times a gathered source was re-requested (PRD S11.3).
+
+        Free in budget terms, so it must be counted explicitly or it disappears.
+        Any non-zero value is a CRITIC BUG, not a budget condition -- assert on it
+        in the eval rather than treating it as expected behaviour.
+        """
+        return sum(
+            1
+            for a in self._admissions
+            if a.outcome is AdmissionOutcome.REJECTED_ALREADY_GATHERED
+        )
+
+    @property
     def admissions(self) -> tuple[AdmissionDecision, ...]:
         """Every admission request, including rejections.
 
@@ -373,6 +387,21 @@ class BudgetLedger:
                 1
                 for a in self._admissions
                 if a.outcome is AdmissionOutcome.REJECTED_COST
+            ),
+            # Counted even though it is free. A duplicate request costs no step
+            # and no budget, so without this it would be a SILENT no-op -- and a
+            # critic re-requesting sources constantly would look like normal
+            # operation while doing no work. Non-zero here is a bug signal, not a
+            # budget event: investigate the critic, do not widen the budget.
+            "n_rejected_duplicate": sum(
+                1
+                for a in self._admissions
+                if a.outcome is AdmissionOutcome.REJECTED_ALREADY_GATHERED
+            ),
+            "n_rejected_steps": sum(
+                1
+                for a in self._admissions
+                if a.outcome is AdmissionOutcome.REJECTED_STEPS
             ),
             "n_admissions": len(self._admissions),
         }

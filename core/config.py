@@ -47,6 +47,15 @@ class BudgetAllocation(BaseModel):
     budget_tokens: int = Field(gt=0)
 
 
+BUDGET_TABLE_VERSION = "budget-v1"
+"""Frozen 14 September 2026, before any evaluation run (PRD v1.5).
+
+Stamped into every results table beside `reference_rule_version`. If the tiers
+move, this string moves with them, so a results table can never silently refer to
+a different cost policy than the one it was produced under.
+"""
+
+
 class BudgetSettings(BaseModel):
     """The severity-to-budget table. Deterministic, auditable, diffable.
 
@@ -90,6 +99,21 @@ class BudgetSettings(BaseModel):
     trio, making budget exhaustion reachable on a fourth source. `critical` is
     generous but still refuses the exhaustive sweep, so no tier permits
     everything.
+
+    `low` IS A CHEAP-INVESTIGATION TIER, NOT A NO-INVESTIGATION TIER. Decided
+    deliberately, because the two produce very different results tables and the
+    name implies the former. At 250 ms it affords telemetry (50), vision (200),
+    and the pair at exactly 250 -- rejecting only audio (350) and manual (400). A
+    low-severity incident therefore gathers two of three sensors and reaches a
+    real verdict; it does not terminate with zero evidence. If a
+    no-investigation tier were ever wanted it would need a budget below 50 ms,
+    and it would need a different name.
+
+    FROZEN as of PRD v1.5, before any evaluation run. Changing these values after
+    results exist makes the finding worthless -- it becomes indistinguishable from
+    tuning parameters until the results look good. Treat any change as a
+    documented amendment with a version bump, the same discipline as
+    `reference_rule_version`.
 
     Token budgets are unchanged and remain non-binding by design: tokens are
     measured, never budgeted (PRD S5.5b). They are retained only so the
