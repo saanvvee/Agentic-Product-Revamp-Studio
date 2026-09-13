@@ -58,7 +58,6 @@ def _incident(**overrides) -> IncidentRecord:
         oracle_exists=True,
         oracle_sources=[Source.AUDIO, Source.TELEMETRY],
         oracle_cost_ms=1_400,
-        oracle_cost_tokens=900,
         split=Split.TEST,
         seed=0,
     )
@@ -163,24 +162,14 @@ def test_absent_oracle_must_have_no_sources_and_no_cost():
         _incident(oracle_exists=False, oracle_sources=[Source.AUDIO])
 
     with pytest.raises(ValidationError, match="oracle cost"):
-        _incident(
-            oracle_exists=False,
-            oracle_sources=[],
-            oracle_cost_ms=100,
-            oracle_cost_tokens=0,
-        )
+        _incident(oracle_exists=False, oracle_sources=[], oracle_cost_ms=100)
 
 
 def test_absent_oracle_is_a_legitimate_record():
     """oracle_exists=False means no subset of sources yields the right answer.
     These incidents SHOULD escalate and are the ground truth for escalation
     precision (PRD S12.1), so the schema must represent them cleanly."""
-    record = _incident(
-        oracle_exists=False,
-        oracle_sources=[],
-        oracle_cost_ms=0,
-        oracle_cost_tokens=0,
-    )
+    record = _incident(oracle_exists=False, oracle_sources=[], oracle_cost_ms=0)
     assert not record.oracle_exists
 
 
@@ -200,6 +189,21 @@ def test_expected_path_is_descriptive_only():
 def test_incident_is_immutable():
     with pytest.raises(ValidationError):
         _incident().is_anomalous = False
+
+
+def test_oracle_has_no_token_ledger():
+    """Regression guard for PRD v1.3.
+
+    An earlier draft froze oracle_cost_tokens into this contract AFTER S5.5b had
+    already moved tokens out of the budget. One ledger, in milliseconds.
+    """
+    assert "oracle_cost_tokens" not in IncidentRecord.model_fields
+
+
+def test_reference_rule_version_travels_with_the_record():
+    """The oracle is frozen at generation time and never recomputed, so the rule
+    that produced it must be recorded beside it (PRD S7.5b)."""
+    assert _incident().reference_rule_version == "logodds-v1"
 
 
 def test_harness_version_is_stamped():

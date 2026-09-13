@@ -2,8 +2,8 @@
 
 **Course:** CSE3101 Agentic AI (BML Munjal University, 2026-27, 7th Semester)
 **Faculty:** Dr. Soharab Hossain Shaikh, Mr. Pranshu Tiwari
-**Document version:** 1.2
-**Date:** 13 September 2026 (v1.0), amended 13 September 2026 (v1.1, v1.2)
+**Document version:** 1.3
+**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1, v1.2, v1.3)
 **Semester window:** 27 July 2026 to 20 November 2026
 **Status:** Ready for Phase-1 submission
 
@@ -43,6 +43,12 @@
 | 1.2 | **Domain cost vs system overhead split** (S5.5b) | Budgeting LLM latency was a category error. The budget models plant evidence acquisition; LLM latency is substrate overhead, measured and reported but never budgeted. Also completes the R8 guard |
 | 1.2 | **R22 added: eval wall-clock is now the critical path**, not the harness (S7.5, S18.1) | ~4 min of local LLM time per incident x 150 incidents = ~10 h per ablation run on CPU. Fix is free Colab T4 for eval runs |
 | 1.2 | R23 added: pin model tags, stamp execution environment into results (S14.3) | Consequence of running dev on CPU and eval on GPU |
+| **1.3** | Oracle reframed as **"the cost-optimal plan under a reference decision rule"** (S7.5b) | It was never a lower bound on the system, only on evidence acquisition under a fixed fusion rule. Naming that kills the circularity |
+| 1.3 | Reference rule is **sum of log-odds**, not mean-of-confidence (S7.5b) | Mean is non-monotone: adding a normal-looking source can flip a correct anomalous verdict, contradicting the project premise that more evidence helps. `max(confidence)` documented as the R7 fallback |
+| 1.3 | **`oracle_cost_tokens` deleted** from the frozen schema (S7.5b, S7.5c, `schemas/incident.py`) | Per S5.5b tokens are measured, never budgeted. The field was a phantom carried in from pre-5.5b text; one ledger, in milliseconds |
+| 1.3 | Dual baseline: omniscient oracle **and** achievable A1; the gap named **"the cost of uncertainty"** (S7.5b) | Regret against an omniscient oracle is unachievable for any online policy, so reporting it alone would make an irreducible property look like failure |
+| 1.3 | Regret **stratified by ambiguity level** (S7.5b) | Near-zero regret on `clear` is a correctness check; large regret on `deceptive` demonstrates irreducibility |
+| 1.3 | Oracle **frozen into the fixture** with `reference_rule_version`; never recomputed at eval time (S7.5b) | Changing the fusion rule would otherwise silently rewrite every historical results table. Same class as R23 |
 
 ---
 
@@ -658,39 +664,135 @@ orchestrator that is a three-line `if/else` over the same rule scores 100%, and 
 measured policy-adherence to our own table rather than decision quality. An examiner would find that,
 and it is a bad thing to be found.
 
-**Replacement.** For each incident, after the detectors are calibrated but before any agent runs, the
-harness computes the oracle offline by brute force:
+**Replacement: the cost-optimal plan under a reference decision rule.**
 
-1. Score all four sources (audio, vision, telemetry, manual) once; cache the scores in the incident record.
+That phrase is deliberate and belongs in the report verbatim. The oracle was never a lower bound on the
+*system*; it is a lower bound on **evidence acquisition given a fixed fusion rule**. Naming that
+honestly is what kills the circularity, because the thing being compared is no longer our own path
+label.
+
+For each incident, after the detectors are calibrated but before any agent runs, the harness computes
+the oracle offline by brute force:
+
+1. Score all four sources (audio, vision, telemetry, manual) once; cache the scores in the record.
 2. Enumerate every subset of sources (2^4 = 16, trivially cheap).
-3. Mark each subset **sufficient** if the fixed decision rule applied to that subset alone yields the
-   correct `is_anomalous` verdict.
-4. Among sufficient subsets, the **oracle set** is the one of minimum declared cost, tie-broken by
-   fewer sources, then by lexical order for determinism.
-5. Record `oracle_sources`, `oracle_cost_ms`, `oracle_cost_tokens`, and `oracle_exists`
-   (false when no subset is sufficient — a legitimate, informative case that *should* escalate).
+3. Mark each subset **sufficient** if the **reference decision rule** (below) applied to that subset
+   alone yields the correct `is_anomalous` verdict.
+4. Among sufficient subsets, the **oracle set** is the one of minimum `cost_ms`, tie-broken by fewer
+   sources, then by lexical order for determinism.
+5. Record `oracle_sources`, `oracle_cost_ms`, `oracle_exists`, and `reference_rule_version`.
 
-The oracle is computed with the same decision rule and the same calibrated scores the live system uses,
-so it is a genuine lower bound for that system, not an unreachable ideal.
-
-**Metric becomes regret, not accuracy:**
+##### The reference decision rule: sum of log-odds
 
 ```
-cost_regret   = actual_cost      - oracle_cost        (>= 0 when the system is correct)
+logit(p) = log(p / (1 - p))            with p clamped to [0.01, 0.99]
+fused    = sum of logit(p_i) over the queried subset
+verdict  = anomalous if fused > 0, else normal
+```
+
+This is the Bayes-optimal fusion of calibrated probabilities under conditional independence, and it is
+three lines of code.
+
+**Why not mean-of-confidence, which an earlier draft proposed.** The mean lets *weak, uninformative*
+evidence overturn a strong signal. Measured on our own implementation:
+
+| Subset | Sum of log-odds | Verdict | Mean | Verdict |
+|---|---|---|---|---|
+| 0.95 | +2.944 | anomalous | 0.950 | anomalous |
+| 0.95, 0.10 | +0.747 | anomalous | 0.525 | anomalous |
+| 0.95, 0.10, 0.15 | **-0.987** | normal | **0.400** | normal |
+| 0.95, 0.45 | +2.744 | anomalous | 0.700 | anomalous |
+| 0.95, 0.45, 0.45 | **+2.543** | anomalous | **0.617** | anomalous |
+
+Read the last row carefully, because it is the whole argument. Two near-uninformative readings at 0.45
+consume **77% of the mean's margin** above its 0.5 boundary, while moving the log-odds sum by **1.5%**
+of its margin. Under the mean, a third such reading flips the verdict; under log-odds, nothing has
+meaningfully happened, which is correct -- a source reporting 0.45 has told us almost nothing.
+
+**Precision about the claim, because the imprecise version is wrong.** Neither rule is monotone, and
+log-odds also flips on row 3 (+0.747 to -0.987). That flip is *correct*: two independent sources both
+reading normal genuinely should outweigh one anomalous reading. The defensible property is not "never
+flips" but **proportionality** -- the fused value moves in proportion to how much the added evidence
+actually says, so noise cannot drag a strong signal across the boundary while genuine counter-evidence
+still can. An earlier draft of this PRD claimed log-odds was monotone and the mean was not; that claim
+is withdrawn as overstated, and the table above is what we defend instead.
+
+**Two caveats, written down now rather than discovered later:**
+
+- **The rule depends on calibration holding, which is R7 and still open.** If the M1 calibration check
+  fails, the documented fallback is `max(confidence)` against the guard band. Decide at M1 with the
+  calibration numbers in hand, not now. Either way, **record which rule was used** in every incident
+  record via `reference_rule_version`.
+- **Clamp confidences to [0.01, 0.99] before taking logits.** A single saturated detector reporting
+  0.0 or 1.0 has infinite log-odds and would dominate every subset it appears in.
+
+**The critic may sometimes beat the oracle. Report that, do not suppress it.** The oracle is optimal
+under a *fixed* rule; an LLM critic reasoning over evidence summaries is not bound by that rule and can
+occasionally do better. Those cases are evidence the LLM is contributing something a fixed rule does
+not, which is the most interesting negative-space result available to us.
+
+##### One ledger, in milliseconds
+
+There is no `oracle_cost_tokens`. Per S5.5b, tokens are **measured but never budgeted**, so the oracle
+optimises a single quantity and the two-ledger ordering ambiguity never arises.
+
+Check this against the least obvious sources. **Memory:** the lookup is a SQLite query, roughly 50 ms,
+and that is its domain cost; the LLM reasoning over what it returns is system overhead. **Manual /
+RAG:** retrieval is domain cost; generation is overhead. Consistent throughout.
+
+##### Metric: regret against two baselines
+
+```
+cost_regret   = actual_cost_ms   - oracle_cost_ms     (>= 0 when the system is correct)
 source_regret = |actual_sources| - |oracle_sources|
 ```
 
-Report mean cost regret, the fraction of incidents at zero regret (the system found the optimal
-evidence set), and negative-correctness cases separately: when the system queried *fewer* sources than
-the oracle and got the wrong answer, that is under-gathering and is weighted harder, consistent with
-S12.3.
+**A single baseline would be misleading**, because the oracle knows `is_anomalous` and the system does
+not. On a deceptive incident where one source happens to be right by luck, the oracle is that one
+source; a system that queries all three, confirms carefully and gets the right answer is charged large
+regret **for behaving correctly under uncertainty**. Bounded regret against an omniscient oracle is
+unachievable in principle for any online policy, so reporting it alone would make an irreducible
+property look like a failure.
+
+Report both, as is standard in the bandit literature:
+
+| Baseline | Achievable? | What it measures |
+|---|---|---|
+| Omniscient oracle | **No** | The floor. What perfect foresight would cost |
+| A1, static always-query-all | **Yes** | What we actually claim to beat |
+
+**The oracle-to-A1 gap is the cost of uncertainty**, and it is a result rather than a caveat: it is what
+perfect foresight would save over exhaustive evidence gathering, and no online policy can capture it.
+It quantifies the room between knowing nothing and knowing everything, and A2 sits somewhere inside it.
+State it in exactly those terms in the report.
+
+##### Stratify regret by ambiguity level
+
+Same computation, three numbers instead of one, and it answers the obvious hostile question before it
+is asked:
+
+| Stratum | Expected | What a violation means |
+|---|---|---|
+| `clear_*` | Near-zero regret | **A correctness check on the orchestrator.** Non-trivial regret here means it is over-gathering on easy cases, which is a finding |
+| `borderline` | Moderate | The interesting middle where adaptivity should pay |
+| `deceptive` | Large, for everyone | **The demonstration that the gap is irreducible**, not that our system failed |
+
+##### The oracle is frozen into the fixture, never recomputed
+
+`oracle_sources`, `oracle_cost_ms`, and `reference_rule_version` are computed **once, at harness
+generation time**, and stored in the incident record.
+
+**Never recompute the oracle at eval time.** Changing the fusion rule in November would otherwise
+silently rewrite every historical results table, and nobody would notice — the same class of failure as
+R23, with the same fix: a version string travelling with the data.
 
 **Why this is better viva material.** "We measure how much more evidence the system bought than it
-needed to, against a per-incident optimum computed by exhaustive search" is a defensible sentence. "We
-measure whether it followed our table" is not.
+needed to, against a per-incident optimum computed by exhaustive search under a stated fusion rule, and
+we report it against both an unachievable floor and an achievable baseline" is a defensible sentence.
+"We measure whether it followed our table" is not.
 
-`expected_path` is retained in the record as a **descriptive** field for stratifying results by
-intended difficulty. It is no longer a scored target. Say that explicitly in EVAL.md.
+`expected_path` is retained in the record as a **descriptive** field for stratifying results by intended
+difficulty. It is no longer a scored target. Say that explicitly in EVAL.md.
 
 #### 7.5c Harness output schema (freeze alongside the evidence contract)
 
@@ -718,7 +820,7 @@ while the real harness is still being built.
   "oracle_exists": true,
   "oracle_sources": ["audio", "telemetry"],
   "oracle_cost_ms": 1400,
-  "oracle_cost_tokens": 900,
+  "reference_rule_version": "logodds-v1",
   "split": "dev | test | demo",
   "seed": 0,
   "harness_version": "1.0"

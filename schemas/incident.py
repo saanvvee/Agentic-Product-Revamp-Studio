@@ -17,8 +17,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from schemas.evidence import Source
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+"""1.1 removed oracle_cost_tokens and added reference_rule_version (PRD v1.3)."""
+
 HARNESS_VERSION = "1.0"
+
+REFERENCE_RULE_VERSION = "logodds-v1"
+"""The fusion rule used to decide oracle sufficiency (PRD S7.5b).
+
+'logodds-v1' is sum of log-odds over clamped confidences, anomalous if > 0.
+If the M1 calibration check fails (R7), the documented fallback is
+'maxconf-v1', and that string must be recorded here for affected fixtures.
+"""
 
 
 class AmbiguityLevel(str, Enum):
@@ -107,7 +117,22 @@ class IncidentRecord(BaseModel):
     """Minimum-cost sufficient subset. Empty iff oracle_exists is False."""
 
     oracle_cost_ms: int = Field(ge=0)
-    oracle_cost_tokens: int = Field(ge=0)
+    """Domain cost of the oracle set, in milliseconds. ONE ledger only.
+
+    There is deliberately no oracle_cost_tokens: per PRD S5.5b tokens are
+    measured but never budgeted, so the oracle optimises a single quantity and
+    the two-ledger ordering ambiguity never arises. An earlier draft of this
+    schema carried a token field that S5.5b had already eliminated.
+    """
+
+    reference_rule_version: str = REFERENCE_RULE_VERSION
+    """Which fusion rule decided sufficiency (PRD S7.5b).
+
+    Travels WITH the data because the oracle is frozen at generation time and
+    never recomputed. Without this, changing the fusion rule would silently
+    rewrite every historical results table -- the same class of failure as R23,
+    with the same fix: a version string beside the numbers it explains.
+    """
 
     split: Split
     seed: int
@@ -134,7 +159,7 @@ class IncidentRecord(BaseModel):
         if not self.oracle_exists:
             if self.oracle_sources:
                 raise ValueError("oracle_exists is False but oracle_sources is non-empty")
-            if self.oracle_cost_ms or self.oracle_cost_tokens:
+            if self.oracle_cost_ms:
                 raise ValueError("oracle_exists is False but an oracle cost was recorded")
         if len(set(self.oracle_sources)) != len(self.oracle_sources):
             raise ValueError("oracle_sources contains duplicates")
