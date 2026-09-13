@@ -28,6 +28,11 @@ __pycache__/
 .ruff_cache/
 
 # --- Detector artefacts and run outputs ---
+# artifacts/ holds trained weights, calibration params, and -- critically --
+# anomalib writes DERIVED MVTec IMAGES here during test(). Those are derivatives
+# of CC BY-NC-SA data and must never reach a public repo.
+# This was a real near-miss on 14 Sep 2026: `git add -A` staged 115 of them.
+artifacts/
 results/
 lightning_logs/
 outputs/

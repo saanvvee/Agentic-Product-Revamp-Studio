@@ -49,6 +49,10 @@
 | 1.3 | Dual baseline: omniscient oracle **and** achievable A1; the gap named **"the cost of uncertainty"** (S7.5b) | Regret against an omniscient oracle is unachievable for any online policy, so reporting it alone would make an irreducible property look like failure |
 | 1.3 | Regret **stratified by ambiguity level** (S7.5b) | Near-zero regret on `clear` is a correctness check; large regret on `deceptive` demonstrates irreducibility |
 | 1.3 | Oracle **frozen into the fixture** with `reference_rule_version`; never recomputed at eval time (S7.5b) | Changing the fusion rule would otherwise silently rewrite every historical results table. Same class as R23 |
+| 1.3 | **B8 CLOSED**: deceptive constructed in calibrated score space (S7.5a) | The conflict is defined where it is measurable -- detector output -- not in physics, where no cross-modal law exists for synthetic composites |
+| 1.3 | **Unresolvable incidents allocated at 7% by exact count** (S7.5a) | Measured: the first generator gave a 0.0% no-oracle rate, leaving escalation precision with no hard cases; a probability draw then swung 0-10% by seed. Now 8.0%/7.3% for every seed, asserted in tests |
+| 1.3 | Score bands declared FIXED, with a mandated M1 divergence check (S7.5a) | The mock-to-real swap is one config line but not distribution-preserving; `scripts/compare_score_distributions.py` must run at M1 and be reported either way |
+| 1.3 | `allow_empty=False` on the oracle (S7.5b, `harness/reference_rule.py`) | The empty set is not a plan, it is the absence of one. An oracle that may decline to investigate is not comparable to a system that must decide what to investigate, and asymmetric cost means acting on zero evidence is wrong even when it is right |
 
 ---
 
@@ -640,21 +644,83 @@ disagree with it deliberately.
 | Borderline | Anomalous in exactly one modality, normal in the other two | 30% |
 | Deceptive | See below | 30% |
 
-**"Deceptive" now has a constructive definition.** v1.0 said "weakly anomalous in two, the pairing
-conflicts" and never said what conflicts means. It was unbuildable. Since our machines are synthetic
-composites, no physical cross-modal law exists to violate, so we define conflict **operationally, by
-detector score percentile**, which is honest and reproducible:
+**"Deceptive" now has a constructive definition, and B8 is CLOSED.**
 
-> A deceptive incident is one where exactly two modalities score in the **55th-75th percentile band**
-> of their own calibrated normal-validation score distribution (weakly anomalous, inside the guard
-> band), **and** those two modalities disagree in sign with the incident's `is_anomalous` label in
-> opposite directions: for a truly anomalous incident, one weakly-anomalous modality is drawn from the
-> normal pool (a miss) and one from the anomalous pool (a hit). The third modality is drawn to be
-> uninformative (40th-60th percentile).
+The original critique (B8) held that this level was **unbuildable**: our machines
+are synthetic composites of three unrelated datasets, there is no physical law
+linking a fan's audio to a metal nut's image, so no rule could say when two
+modalities "conflict".
 
-That is buildable the day the detectors are calibrated, and it means a deceptive incident *cannot* be
-resolved from any single source — which is precisely what should force the sequential path. Declare
-in the report that deceptiveness is defined in detector-score space, not in physics.
+**Constructing directly in calibrated score space dissolves that problem.** We do
+not search real clips for a cross-modal conflict that does not exist. We sample
+confidences with a specified statistical relationship, then attach real files
+whose class (normal or anomalous) matches the sampled sign. The conflict is
+defined where it is actually measurable -- in the detector's own output -- rather
+than in physics, where it is not. B8 is therefore closed rather than deferred.
+
+Implemented in `harness/synthetic.py`. Bands, in calibrated confidence:
+
+| Band | Range | Role |
+|---|---|---|
+| `STRONG_ANOMALOUS` | 0.88-0.98 | Above the 0.85 guard band; decisive alone |
+| `WEAK_ANOMALOUS` | 0.55-0.75 | Inside the band, leaning anomalous |
+| `UNINFORMATIVE` | 0.40-0.60 | Straddles 0.5; contributes ~nothing to fused log-odds |
+| `WEAK_NORMAL` | 0.25-0.45 | Inside the band, leaning normal |
+| `STRONG_NORMAL` | 0.02-0.12 | Below the 0.15 guard band; decisive alone |
+
+A **deceptive** incident has exactly two sources in the weak bands **disagreeing
+in sign** -- one agreeing with ground truth (a hit), one contradicting it (a miss)
+-- with the third uninformative. Under the reference rule the pair nearly cancels,
+so no single source resolves the incident.
+
+##### Unresolvable incidents: a tuned target, not an accident
+
+A **7% share of all incidents is constructed so that EVERY source contradicts
+ground truth**, making `oracle_exists` false. These are where escalation
+precision and recall (S12.1) get their teeth: the correct behaviour is "I cannot
+determine this, escalate", and a system that answers confidently is wrong even
+when it guesses right.
+
+**This was found by measurement, and both attempts failed first:**
+
+1. The initial generator produced a no-oracle rate of **exactly 0.0%**, because
+   every construction guaranteed at least one source agreeing with the truth. Our
+   most novel metric would have had no hard cases at all, and we would only have
+   discovered that after building the eval.
+2. The fix, drawn per-incident as `rng.random() < share`, gave realised rates from
+   **0.0% to 10.0% across seeds** -- one seed produced a test split with *no*
+   unresolvable incidents, leaving escalation precision undefined for that run.
+
+**Allocated as an exact count, never sampled as a probability.** Realised rate is
+now 8.0% (dev) and 7.3% (test), identical for every seed, and asserted in
+`tests/test_harness_seam.py` so a future generator change cannot drift it back
+toward zero. Target band is 5-10%: near zero and the metric measures nothing,
+much larger and the ambiguity construction or the calibration is wrong.
+
+These incidents are also physically meaningful rather than contrived: a genuine
+early-stage fault that no installed sensor can yet detect is exactly the case
+where an honest system must decline to answer.
+
+##### Score distributions are FIXED parameters, not fitted (decision, with a cost)
+
+The bands above are fixed constants chosen before any real detector existed. That
+keeps the generator reproducible, hand-checkable, and unblocked by dataset
+downloads.
+
+**The honest cost: mock and real detectors will differ in distribution, so the
+mock-to-real swap is one line of config but is NOT distribution-preserving.** The
+guard bands, the ambiguity construction, and the oracle all live in confidence
+space, so an unexamined gap there would quietly invalidate every result built on
+mock data. If real PaDiM confidences cluster at 0.99 and 0.01, the "weak
+anomalous" band describes nothing that ever happens and the deceptive level stops
+being deceptive.
+
+**M1 therefore carries a mandated check**, not an optional one:
+`scripts/compare_score_distributions.py` compares real calibrated scores against
+these bands, reports per-band occupancy and saturation, and fails if any band
+holds under 5% of real scores or if over 25% of scores are saturated. Record the
+result in EVAL.md **whether it passes or fails** -- a passed check is evidence. If
+it fails, refit the bands, bump `HARNESS_VERSION`, and regenerate every fixture.
 
 #### 7.5b Cost-optimal oracle and regret (replaces "expected path")
 
@@ -931,9 +997,32 @@ why S12.4 now measures variance on A2 only.
 
 ### 8.2 Model choice
 
+**MEASURED on our own hardware, 14 September 2026** -- PRD v1.0 quoted "9.2 seconds" from a published
+benchmark with unstated hardware, which is fine as rationale and dangerous as a pass criterion:
+
+| Measurement | Value |
+|---|---|
+| PaDiM fit, `metal_nut`, 220 train images | **33.9 s** |
+| Test over 115 images | 18.5 s |
+| **Per-image inference** | **161 ms** |
+| image AUROC | **0.930** |
+| image F1 | 0.938 |
+| pixel AUROC | 0.946 |
+| Hardware | AMD Ryzen 5 5500U, 15.3 GB RAM, **no GPU**, `torch 2.14.0+cpu` |
+
+Two things follow. First, 33.9 s is 3.7x the published 9.2 s, entirely explained by CPU-only execution --
+quote our own number in the report, with the hardware, and cite the benchmark only as rationale for
+choosing PaDiM over PatchCore. Second, and more important: **161 ms per image validates the domain cost
+model.** `DECLARED_COST_MS[VISION]` was set to 200 ms before any measurement existed, and the measured
+value sits inside it. The S5.5b budget of 8,000 ms for a `critical` incident is therefore a real
+constraint over real detector latencies, not a round number.
+
+AUROC 0.930 also closes R12 (detector accuracy too low for meaningful orchestration): comfortably strong
+enough that orchestration differences, not detector noise, will drive the results.
+
 | Detector | Model | Rationale |
 |---|---|---|
-| Vision | Anomalib PaDiM | PaDiM trains in about 9.2 seconds versus PatchCore's 282.8 seconds, with a pixel AUROC drop of only 0.003 |
+| Vision | Anomalib PaDiM | Trains in ~34 s on our CPU (9.2 s published, on a GPU) versus PatchCore's 282.8 s, with a pixel AUROC drop of only 0.003 |
 | Audio | Anomalib PaDiM on mel-spectrograms | Same pipeline, same code |
 | Telemetry | scikit-learn IsolationForest | Trivial on 10k rows |
 
