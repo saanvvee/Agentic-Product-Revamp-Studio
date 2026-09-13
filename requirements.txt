@@ -1,0 +1,51 @@
+# Adaptive Multi-Modal Industrial Incident-Response Agent
+# CSE3101 Agentic AI, BML Munjal University
+#
+# Interpreter: CPython 3.11.9 (venv created with `py -3.11 -m venv .venv`)
+# See .python-version. 3.12 is also installed on the primary dev machine and is
+# NOT what this project runs on -- always activate .venv first.
+#
+# PRD S14.1: every dependency is pinned to an exact version. Never loosen a pin.
+# Pins are added group by group as each pre-flight group (A-D) resolves them.
+
+# --- Group A: base environment ---
+# (no runtime dependencies yet; pip 24.0, setuptools from the 3.11.9 venv)
+
+# --- Group B: agent framework (ARCHITECTURE GATE PASSED 13 Sep 2026) ---
+# Graph workflow verified: two nodes, one conditional route, both branches hit.
+# Pulls google-genai as a transitive dep, which is also our Gemini client.
+google-adk==2.9.0
+google-genai==2.23.0
+
+# --- Group C: models (PARTIAL -- Gemini items blocked on API key) ---
+# Local LLM: qwen3:4b via Ollama (client 0.30.10), NOT gemma3.
+# Gemma 3 has no tool-call support in Ollama:
+#   {"error":"registry.ollama.ai/library/gemma3:4b does not support tools"}
+# Provider prefix MUST be ollama_chat (verified: `ollama` silently makes no
+# tool call, returns empty text, raises nothing).
+litellm==1.100.1
+
+# --- Group D: detectors, protocols, observability ---
+# anomalib pulls torch/lightning/torchvision; CPU-only build on this hardware.
+anomalib==2.6.2
+torch==2.14.0
+torchvision==0.29.0
+lightning==2.6.6
+scikit-learn==1.9.1
+numpy==2.4.6
+
+# MCP: 2.x renamed FastMCP -> MCPServer (from mcp.server.mcpserver import MCPServer).
+# Verified: 2 concurrent tool calls over ONE stdio session OVERLAP (4.02s -> 2.02s),
+# so the S5.6 parallel fan-out is real over stdio. R20 closed.
+mcp==2.2.0
+
+# A2A is an optional extra of google-adk; `to_a2a` import fails without it.
+a2a-sdk==1.1.2
+
+# Observability
+arize-phoenix==20.11.0
+arize-phoenix-otel==0.17.1
+openinference-instrumentation-google-adk==0.1.27
+
+# Dataset fetch (Group D, not yet exercised)
+# ucimlrepo==

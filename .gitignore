@@ -1,0 +1,45 @@
+# --- Datasets: NEVER COMMIT (PRD S7.4, R17) ---
+# MVTec AD is CC BY-NC-SA and this repository is public.
+data/
+datasets/
+*.wav
+*.ckpt
+*.pt
+*.pth
+
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+*.key
+
+# --- LLM response cache (PRD S7.8) ---
+# Gitignored wholesale; a small fixture subset is force-added deliberately.
+cache/
+!cache/fixtures/
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# --- Detector artefacts and run outputs ---
+results/
+lightning_logs/
+outputs/
+*.db
+*.sqlite3
+decisions.jsonl
+
+# --- Observability ---
+.phoenix/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
