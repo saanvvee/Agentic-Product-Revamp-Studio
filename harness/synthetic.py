@@ -422,6 +422,7 @@ class SyntheticEventSource:
             telemetry_row=_telemetry_row(machine, is_anomalous, rng),
             is_anomalous=is_anomalous,
             ambiguity_level=level,
+            is_unresolvable=unresolvable,
             expected_path=EXPECTED_PATH[level],
             cached_scores={
                 source: CachedScore(

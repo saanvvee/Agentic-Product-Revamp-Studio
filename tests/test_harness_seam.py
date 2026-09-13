@@ -238,3 +238,52 @@ def test_payload_class_matches_the_sampled_score_sign():
 def test_unresolvable_share_is_documented_where_it_is_used():
     """Guard against the constant drifting away from the tested band."""
     assert 0.05 <= UNRESOLVABLE_SHARE <= 0.10
+
+
+# --------------------------------------------------------------------------
+# is_unresolvable vs ambiguity_level: the escalation metric depends on the
+# distinction, so it is asserted rather than assumed (PRD S12.1).
+# --------------------------------------------------------------------------
+
+
+def test_unresolvable_is_not_the_same_as_deceptive():
+    """The confound this field exists to prevent.
+
+    Escalating on an unresolvable incident is CORRECT -- no evidence could have
+    resolved it. Escalating on a merely deceptive one may be a FAILURE, because
+    the evidence was sufficient and the system gave up. If ambiguity_level stood
+    in for unresolvability, escalation precision would reward giving up on hard
+    cases.
+    """
+    records = list(SyntheticEventSource(seed=0).events(Split.TEST))
+    deceptive = [r for r in records if r.ambiguity_level is AmbiguityLevel.DECEPTIVE]
+    unresolvable = [r for r in records if r.is_unresolvable]
+
+    assert unresolvable, "no unresolvable incidents: escalation has no ground truth"
+    # Every unresolvable incident is deceptive...
+    assert all(r.ambiguity_level is AmbiguityLevel.DECEPTIVE for r in unresolvable)
+    # ...but MOST deceptive incidents are resolvable, which is the whole point.
+    assert len(unresolvable) < len(deceptive)
+    resolvable_deceptive = [r for r in deceptive if not r.is_unresolvable]
+    assert resolvable_deceptive, "deceptive must include resolvable cases too"
+
+
+def test_intent_and_measured_outcome_agree():
+    """is_unresolvable is the harness's construction; oracle_exists is what the
+    reference rule measured. Keeping both is only worthwhile if a divergence
+    fails loudly, which the schema validator enforces."""
+    for record in SyntheticEventSource(seed=0).events(Split.TEST):
+        assert record.is_unresolvable == (not record.oracle_exists)
+
+
+def test_schema_rejects_a_disagreement_between_intent_and_outcome():
+    """Directly exercise the validator: a future fusion-rule change that breaks
+    the correspondence must fail rather than silently shift escalation numbers."""
+    from pydantic import ValidationError
+
+    record = next(iter(SyntheticEventSource(seed=0).events(Split.DEV)))
+    payload = record.model_dump(mode="json")
+    payload["is_unresolvable"] = True  # claim unresolvable while an oracle exists
+
+    with pytest.raises(ValidationError, match="construction and the rule disagree"):
+        IncidentRecord.model_validate(payload)

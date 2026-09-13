@@ -2,8 +2,8 @@
 
 **Course:** CSE3101 Agentic AI (BML Munjal University, 2026-27, 7th Semester)
 **Faculty:** Dr. Soharab Hossain Shaikh, Mr. Pranshu Tiwari
-**Document version:** 1.3
-**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1, v1.2, v1.3)
+**Document version:** 1.4
+**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.4)
 **Semester window:** 27 July 2026 to 20 November 2026
 **Status:** Ready for Phase-1 submission
 
@@ -53,6 +53,12 @@
 | 1.3 | **Unresolvable incidents allocated at 7% by exact count** (S7.5a) | Measured: the first generator gave a 0.0% no-oracle rate, leaving escalation precision with no hard cases; a probability draw then swung 0-10% by seed. Now 8.0%/7.3% for every seed, asserted in tests |
 | 1.3 | Score bands declared FIXED, with a mandated M1 divergence check (S7.5a) | The mock-to-real swap is one config line but not distribution-preserving; `scripts/compare_score_distributions.py` must run at M1 and be reported either way |
 | 1.3 | `allow_empty=False` on the oracle (S7.5b, `harness/reference_rule.py`) | The empty set is not a plan, it is the absence of one. An oracle that may decline to investigate is not comparable to a system that must decide what to investigate, and asymmetric cost means acting on zero evidence is wrong even when it is right |
+| **1.4** | **`is_unresolvable` added to the incident record**, distinct from `ambiguity_level` (schema 1.2, S7.5a) | Collapsing them confounded two behaviours: escalating on an unresolvable incident is correct, escalating on a merely deceptive one may be a failure. Escalation precision would have rewarded giving up on hard cases |
+| 1.4 | Schema validator asserts construction intent matches the reference rule outcome | Keeping both fields is only worthwhile if a divergence fails loudly rather than shifting escalation numbers quietly |
+| 1.4 | **M1 divergence-check failure branch decided in advance** (S7.5a) | "Report it either way" was not a plan; the action now depends on when the failure is found, and the limitation paragraph is pre-drafted |
+| 1.4 | Declared cost documented as a **model parameter**, not a measurement (S5.5a) | Measured PaDiM latency differs between dev CPU and eval GPU; without the distinction a reader would see cost fall and think the budget moved |
+| 1.4 | **Pre-commit hook** blocking dataset bytes and secrets (`scripts/pre-commit`, R17) | R17 nearly fired twice from unpredicted paths, caught only by manual audit. Habits degrade under deadline pressure; this converts discipline into a guarantee |
+| 1.4 | PaDiM measured: 33.9 s fit, **161 ms/image**, AUROC 0.930 (S8.2) | Validates `DECLARED_COST_MS[VISION]` of 200 ms, set before measurement. Closes R12 |
 
 ---
 
@@ -431,9 +437,27 @@ substrate honestly:
 allowed to cost. We never let a language model pick its own spending limit."
 
 **Declared vs measured cost.** Each evidence source publishes a static `declared_cost` used by the
-orchestrator *for planning*, and every call returns its `cost_ms` / `cost_tokens` *measured*. The
-orchestrator plans against declared, the ledger debits measured. Publishing the drift between the two
-is a free result and a good viva answer.
+orchestrator *for planning*, and every call returns its measured `cost_ms`. The orchestrator plans
+against declared; the ledger debits measured. Publishing the drift between the two is a free result and
+a good viva answer.
+
+**Declared cost is a MODEL PARAMETER, not a measurement, and the results table must say so.** The two
+diverge by environment: PaDiM inference measured **161 ms on the dev CPU** and will be substantially
+faster on the Colab T4 used for eval runs (R22). The declared 200 ms does not change when the hardware
+does.
+
+The R23 environment stamp must therefore distinguish three quantities explicitly, or a reader will see
+a measured cost fall and conclude the budget moved:
+
+| Quantity | Changes with hardware? | Where it appears |
+|---|---|---|
+| `declared_cost_ms` | **No.** Fixed parameter of the simulated plant | Config; the orchestrator planning input |
+| measured `cost_ms` | **Yes** | Every evidence report; the debited ledger |
+| `budget_ms` | **No.** Derived from severity via the static table | `decisions.jsonl` |
+
+Label EVAL.md columns as *declared (model)* and *measured (observed, ENV)*. The budget is defined over
+the model, so guard bands and the oracle stay stable across environments even when observed latency does
+not -- which is what makes cross-environment results comparable at all.
 
 **Admission control, not interruption.** A call is admitted only if the declared cost fits the
 remaining budget; an in-flight call is never killed. For a parallel group, admission tests the summed
@@ -719,8 +743,31 @@ being deceptive.
 `scripts/compare_score_distributions.py` compares real calibrated scores against
 these bands, reports per-band occupancy and saturation, and fails if any band
 holds under 5% of real scores or if over 25% of scores are saturated. Record the
-result in EVAL.md **whether it passes or fails** -- a passed check is evidence. If
-it fails, refit the bands, bump `HARNESS_VERSION`, and regenerate every fixture.
+result in EVAL.md **whether it passes or fails** -- a passed check is evidence.
+
+##### The decision branch if that check fails, decided NOW
+
+"Report it either way" is honest but it is not a plan, and deciding this in
+October under time pressure is how a bad choice gets made. The branch is
+therefore fixed in advance, keyed on **when** the failure is found:
+
+| Condition | Action | Why |
+|---|---|---|
+| Fails **before the M2 gate (1 Oct)** | **Refit the bands, bump `HARNESS_VERSION`, regenerate every fixture.** Re-run nothing else | No result depends on the old bands yet; cheapest possible moment |
+| Fails **after M2, before M7 eval runs** | **Refit, bump, regenerate, and re-run the static baseline only** | A1 is cheap to re-run and adaptive results do not exist yet |
+| Fails **during or after M7** | **Keep the bands. Write the limitation paragraph. Do NOT refit** | Refitting mid-eval invalidates every completed run and cannot finish before 20 Nov. A stated limitation costs a fraction of a grade band; an unfinishable re-run costs the deliverable |
+| Fails **for one modality only** | Refit that modality alone; bands are per-source constants | Localised failure, localised fix |
+
+The limitation paragraph, if needed, is already drafted: *Our synthetic score
+bands were fixed before detector calibration. At M1 we measured the divergence
+between them and real calibrated detector output and found [X]. We did not refit,
+because doing so would have invalidated completed evaluation runs inside the
+project window. Results should therefore be read as measuring orchestration
+behaviour over a score distribution that is realistic in structure but not fitted
+in detail.*
+
+That paragraph is worth more than a silent refit: it tells an examiner we measured
+the thing and chose knowingly.
 
 #### 7.5b Cost-optimal oracle and regret (replaces "expected path")
 

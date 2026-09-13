@@ -17,8 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from schemas.evidence import Source
 
-SCHEMA_VERSION = "1.1"
-"""1.1 removed oracle_cost_tokens and added reference_rule_version (PRD v1.3)."""
+SCHEMA_VERSION = "1.2"
+"""1.1 removed oracle_cost_tokens and added reference_rule_version (PRD v1.3).
+1.2 added is_unresolvable, distinct from ambiguity_level, so that escalation
+precision can separate 'correctly declined an impossible incident' from 'gave up
+on a merely hard one' (PRD v1.4)."""
 
 HARNESS_VERSION = "1.0"
 
@@ -93,6 +96,32 @@ class IncidentRecord(BaseModel):
 
     ambiguity_level: AmbiguityLevel
 
+    is_unresolvable: bool = False
+    """True when the harness CONSTRUCTED this incident so every source
+    contradicts ground truth (PRD S7.5a).
+
+    Deliberately distinct from `ambiguity_level` and from `not oracle_exists`,
+    because collapsing them confounds two different behaviours in the escalation
+    metric (PRD S12.1):
+
+        escalated on an unresolvable incident  -> CORRECT. No evidence could have
+                                                  resolved it; declining to answer
+                                                  is the right action.
+        escalated on a merely deceptive one    -> possibly a FAILURE. The evidence
+                                                  was sufficient and the system
+                                                  gave up anyway.
+
+    Every unresolvable incident is deceptive, but most deceptive incidents are
+    resolvable, so `ambiguity_level` cannot stand in for this. Without the
+    separate field, escalation precision would silently reward giving up on hard
+    cases.
+
+    Note this is the harness's INTENT, whereas `oracle_exists` is the measured
+    consequence under the reference rule. They agree in practice and a validator
+    below asserts it; keeping both means a future rule change that breaks the
+    correspondence fails loudly instead of quietly shifting the metric.
+    """
+
     expected_path: Path
     """DESCRIPTIVE ONLY -- never a scored target (PRD S7.5b).
 
@@ -163,4 +192,21 @@ class IncidentRecord(BaseModel):
                 raise ValueError("oracle_exists is False but an oracle cost was recorded")
         if len(set(self.oracle_sources)) != len(self.oracle_sources):
             raise ValueError("oracle_sources contains duplicates")
+
+        # The harness's intent and the reference rule's measured outcome must
+        # agree. They are separate fields on purpose (see is_unresolvable), and
+        # this assertion is what makes keeping both worthwhile: if a future rule
+        # change breaks the correspondence, it fails here rather than quietly
+        # shifting every escalation number.
+        if self.is_unresolvable and self.oracle_exists:
+            raise ValueError(
+                "is_unresolvable is True but the reference rule found a "
+                "sufficient subset -- the construction and the rule disagree"
+            )
+        if not self.oracle_exists and not self.is_unresolvable:
+            raise ValueError(
+                "no sufficient subset exists but is_unresolvable is False -- an "
+                "incident became unresolvable by accident, which means the "
+                "ambiguity construction is not doing what it claims"
+            )
         return self

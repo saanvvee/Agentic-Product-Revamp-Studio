@@ -159,18 +159,31 @@ def test_oracle_exists_requires_sources():
 
 def test_absent_oracle_must_have_no_sources_and_no_cost():
     with pytest.raises(ValidationError, match="non-empty"):
-        _incident(oracle_exists=False, oracle_sources=[Source.AUDIO])
+        _incident(
+            oracle_exists=False, is_unresolvable=True, oracle_sources=[Source.AUDIO]
+        )
 
     with pytest.raises(ValidationError, match="oracle cost"):
-        _incident(oracle_exists=False, oracle_sources=[], oracle_cost_ms=100)
+        _incident(
+            oracle_exists=False,
+            is_unresolvable=True,
+            oracle_sources=[],
+            oracle_cost_ms=100,
+        )
 
 
 def test_absent_oracle_is_a_legitimate_record():
     """oracle_exists=False means no subset of sources yields the right answer.
     These incidents SHOULD escalate and are the ground truth for escalation
     precision (PRD S12.1), so the schema must represent them cleanly."""
-    record = _incident(oracle_exists=False, oracle_sources=[], oracle_cost_ms=0)
+    record = _incident(
+        oracle_exists=False,
+        is_unresolvable=True,
+        oracle_sources=[],
+        oracle_cost_ms=0,
+    )
     assert not record.oracle_exists
+    assert record.is_unresolvable
 
 
 def test_oracle_sources_must_not_repeat():
@@ -189,6 +202,18 @@ def test_expected_path_is_descriptive_only():
 def test_incident_is_immutable():
     with pytest.raises(ValidationError):
         _incident().is_anomalous = False
+
+
+def test_absent_oracle_must_be_declared_unresolvable():
+    """An incident cannot become unresolvable by accident (PRD v1.4).
+
+    If no subset is sufficient but the harness did not construct it that way,
+    the ambiguity construction is not doing what it claims, and escalation
+    ground truth would be silently wrong.
+    """
+    with pytest.raises(ValidationError, match="unresolvable by accident"):
+        _incident(oracle_exists=False, is_unresolvable=False, oracle_sources=[],
+                  oracle_cost_ms=0)
 
 
 def test_oracle_has_no_token_ledger():
