@@ -17,6 +17,29 @@ every mechanism would still work and simply never be exercised.
 
 That failure is invisible in a results table unless it is looked for, so it is
 measured here and reported alongside every run (PRD S12.1).
+
+WHAT TO DO IF IT FIRES -- decided in advance, because a warning nobody acts on is
+the observability equivalent of a silent no-op:
+
+    One tier > 75%        Inspect the triage PROMPT first, not the tiers. A
+                          classifier collapsing to one label is usually a prompt
+                          problem (ambiguous severity definitions, no examples).
+                          Fix the prompt, re-run dev, re-check. Do NOT adjust the
+                          budget tiers to match the skew -- that is the circularity
+                          the frozen table exists to prevent.
+
+    One tier < 10%        Accept and document, with the rate stated. Report
+                          tier-specific numbers as raw counts, never percentages,
+                          and say explicitly that that tier is under-sampled.
+
+    A tier at exactly 0%  Report the affected mechanism as UNEXERCISED rather than
+                          as working. This is the honest version of the inert-budget
+                          failure: the code is correct and untested by the data.
+
+    Still degenerate      Document it as a limitation and proceed. Do not tune
+    after a prompt fix    triage toward a target distribution; a convenient spread
+                          obtained by tuning is worth less than an inconvenient one
+                          reported honestly.
 """
 
 from __future__ import annotations

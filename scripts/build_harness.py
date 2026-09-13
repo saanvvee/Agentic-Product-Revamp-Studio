@@ -15,8 +15,13 @@ import argparse
 from collections import Counter
 from pathlib import Path
 
+from harness.demo_builder import DEMO_FIXTURE_NAME, build_demo_incidents
 from harness.replay import write_fixture
-from harness.synthetic import SyntheticEventSource, no_oracle_rate
+from harness.synthetic import (
+    INCIDENT_SPACING_HOURS,
+    SyntheticEventSource,
+    no_oracle_rate,
+)
 from schemas.incident import HARNESS_VERSION, Split
 
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "eval" / "evalsets"
@@ -31,9 +36,19 @@ def main() -> int:
     source = SyntheticEventSource(seed=args.seed)
     suffix = "" if args.seed == 0 else f".seed{args.seed}"
 
-    print(f"harness_version={HARNESS_VERSION} seed={args.seed}\n")
+    print(
+        f"harness_version={HARNESS_VERSION} seed={args.seed} "
+        f"spacing={INCIDENT_SPACING_HOURS}h\n"
+    )
 
     for split in Split:
+        if split is Split.DEMO:
+            # The SAMPLED demo split cannot reach Scenario D (PRD S7.7): 8
+            # incidents across 3 machines can never accumulate the two prior
+            # confirmed faults the Tier 3 gate needs. The constructed split is
+            # written separately below.
+            continue
+
         path = args.out_dir / f"incidents.{split.value}{suffix}.jsonl"
         written = write_fixture(source.events(split), path)
 
@@ -60,8 +75,17 @@ def main() -> int:
             flag = "OUT OF TARGET BAND"
         print(f"      no-oracle rate: {rate:.1%}  [{flag}]")
 
-    print("\nFixtures are gitignored. Regenerate rather than commit them,")
-    print("and bump HARNESS_VERSION if the generator changes.")
+    demo_path = args.out_dir / DEMO_FIXTURE_NAME
+    written = write_fixture(build_demo_incidents(seed=args.seed), demo_path)
+    print(f"demo  n={written:3} -> {demo_path.name}  [CONSTRUCTED]")
+    print("      hand-built for scenario coverage, never used for reported")
+    print("      results; eval/split_guard.py refuses to aggregate over it.")
+
+    print("\nFixtures ARE committed, deliberately: PRD S7.5b requires every")
+    print("reported result to replay one specific frozen file, and they hold no")
+    print("dataset bytes -- only paths, labels, scores, and the oracle.")
+    print("Bump HARNESS_VERSION when the generator changes, and commit the")
+    print("regenerated fixtures in the same commit as the generator change.")
     return 0
 
 

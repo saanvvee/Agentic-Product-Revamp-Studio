@@ -2,8 +2,8 @@
 
 **Course:** CSE3101 Agentic AI (BML Munjal University, 2026-27, 7th Semester)
 **Faculty:** Dr. Soharab Hossain Shaikh, Mr. Pranshu Tiwari
-**Document version:** 1.5
-**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.5)
+**Document version:** 1.6
+**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.6)
 **Semester window:** 27 July 2026 to 20 November 2026
 **Status:** Ready for Phase-1 submission
 
@@ -69,6 +69,11 @@
 | 1.5 | Budget tiers **frozen as `budget-v1`** before any eval run (S5.5a) | Tuning tiers to make admission fire is necessary; tuning them after seeing results is circular. A version string makes the difference auditable |
 | 1.5 | Duplicate source requests **counted** though they cost nothing (`core/budget.py`) | A free no-op is invisible: a critic re-requesting sources constantly would look like normal operation. Non-zero is a critic bug, not a budget event |
 | 1.5 | **Severity-distribution degeneracy check** added (`eval/severity_health.py`, S12.1) | With binding tiers, triage is load-bearing on the headline result. A 95%-`standard` classifier would make the tier system decorative while every mechanism test still passed |
+| **1.6** | **`INCIDENT_SPACING_HOURS` 1 -> 6**, harness 1.1 (S7.5, `harness/synthetic.py`) | At 1 hour, 150 incidents spanned 6 days and the memory-recency rule fired on **86.7%** of incidents -- a constant, not a condition. A3 would have measured nothing. At 6 hours the span is 37 days and the S10.3 rules fire at 26.0% and 2.0% |
+| 1.6 | **Verdict-to-tier mapping specified with arithmetic first** (S11.1a) | Confidence alone put Tier 3 at 20.0%; the memory gate as originally worded filtered it only to 18.7%. Adopted rule (>=2 confirmed faults in 3 days) gives 2.0% |
+| 1.6 | **Demo split hand-CONSTRUCTED**, 12 incidents (S7.7, `harness/demo_builder.py`) | The sampled 8-incident split could never trigger Scenario D. Test must be representative, demo must be complete, and sampling achieves only the first |
+| 1.6 | `eval/split_guard.py` refuses to aggregate over constructed incidents | Non-representative by design; it would poison any results table it reached |
+| 1.6 | **Recurring-pattern lesson promoted to report S12.1** (S20.1) | Three occurrences of one failure -- thresholds in unmeasured units -- is a methodological finding, not three anecdotes |
 
 ---
 
@@ -1134,9 +1139,34 @@ Five templates, one per action tier plus a split at tier 2. `WO-HALT-LINE` is th
 |---|---|---|
 | Dev | 50 | Prompt iteration, fast loop |
 | Test | 150 | Reported results, frozen |
-| Demo | 8 | Hand-picked, one per scenario in Section 3 |
+| Demo | 12 | **Hand-CONSTRUCTED**, not sampled. See below |
 
 150 is deliberate. It is enough for a credible table and small enough to survive Section 7.8.
+
+**The demo split is constructed, not sampled, and that is what a demo split is
+for.** The two splits have different jobs and sampling can only do one of them:
+
+| Split | Job | Achievable by sampling? |
+|---|---|---|
+| `test` | **Representative** -- it produces the reported numbers | Yes, and it must be |
+| `demo` | **Complete** -- it must exercise every path, including rare ones | **No** |
+
+Measured: the sampled 8-incident demo split could **never** trigger Scenario D,
+because the Tier 3 precondition needs two prior confirmed faults on one machine and
+8 incidents round-robined across 3 machines cannot accumulate them. A demo that
+cannot show the safety story is a demo of the common case, not of this system.
+
+`harness/demo_builder.py` therefore specifies 12 incidents by hand, each with a
+documented purpose, including two deliberately planted precondition chains: three
+confirmed faults on one machine for the Tier 3 block, and four false alarms on
+another for the memory downgrade. Written to
+**`incidents.demo_constructed.jsonl`** -- a distinct filename so it cannot be
+mistaken for a sampled split.
+
+**Guard:** `eval/split_guard.assert_reportable()` raises if any results computation
+is handed a constructed incident, including a single one smuggled into a real
+split. Being non-representative by design, it would poison any aggregate it
+reached. Same class of protection as the token-ledger regression test.
 
 ### 7.8 The real constraint: LLM quota, not compute
 
@@ -1364,6 +1394,46 @@ The memory agent must change decisions, not just add colour. Concretely:
 | 1 Low impact | Schedule routine inspection | Auto |
 | 2 Medium impact | Dispatch technician, raise priority ticket | Auto with audit log |
 | 3 High impact | Halt line, shut down machine, emergency callout | **Blocked, requires human approval** |
+
+#### 11.1a Verdict-to-tier mapping, with the arithmetic done first
+
+v1.5 listed tiers and example actions but never said **what maps a verdict to a
+tier** -- the same class of gap as "who sets the budget". Left unspecified, Tier 3
+risked being inert exactly as the budget table was: every branch tested, mechanism
+never exercised, and "show me the system blocking an action" answered with silence.
+
+**Measured before writing any guardrail code** (test split, n=150, harness 1.1):
+
+| Candidate rule | Tier 3 rate | Verdict |
+|---|---|---|
+| Anomalous AND fused log-odds > 5 | **20.0%** | Far too high. One incident in five halting a production line is not a safety control |
+| ...AND any prior anomaly within 7 days | **18.7%** | **The memory gate did nothing.** The 7-day window was wider than the dataset's 6-day span |
+| ...AND **>= 2 confirmed faults within 3 days** | **2.0%** (3 incidents) | **ADOPTED** |
+| ...AND >= 3 confirmed faults within 7 days | 2.7% (4) | Also viable |
+
+**The adopted rule:**
+
+```
+Tier 3 (blocked, requires human approval) iff
+    verdict is anomalous
+AND fused log-odds > 5.0
+AND the machine has >= 2 confirmed faults in the preceding 3 days
+```
+
+Three properties worth stating in the report. It is **rare** (2.0%), as a safety
+control must be. It **depends on memory**, which gives the memory agent a fourth
+measurable effect beyond S10.3's three and strengthens ablation A3. And it is
+**auditable**: three conditions, all computable from stored state, none from a
+prompt.
+
+**Reporting caution.** Three incidents is a thin denominator. Report the guardrail's
+block rate and false-block rate as **raw counts alongside any percentage** -- "3 of
+3 Tier 3 actions blocked" is honest, "100% block rate" over n=3 invites a
+reasonable objection.
+
+Tiers 0-2 map from verdict and confidence alone: normal or dismissed is Tier 0,
+anomalous below the decisive band is Tier 1 (inspection), anomalous above it is
+Tier 2 (dispatch). Only Tier 3 consults memory.
 
 ### 11.2 Implementation
 
@@ -1852,11 +1922,57 @@ Independent of the project. Revise agent fundamentals, ReAct, CoT, ToT, self-con
 10. Evaluation methodology, including the custom trajectory metric and why ADK's built-in one was insufficient
 11. Results: detection, orchestration, cost, ablations
 12. Discussion: adaptivity buys efficiency, not accuracy
+    12.1 **Thresholds in unmeasured units: a recurring methodological failure**
 13. Limitations and threats to validity
 14. Future work
 15. Individual contributions
 
 ---
+
+## 20.1 Report section 12.1: thresholds in unmeasured units
+
+**Write this as a first-class discussion section, not a footnote in methods.** It is
+an honest account of a real mistake we caught ourselves, three times, and it reads
+as engineering maturity rather than as an admission.
+
+### The pattern
+
+The same failure occurred three times during development, in three unrelated
+subsystems. In each case a threshold was expressed in units that nothing had yet
+measured, every code path was implemented and tested, and the mechanism **could
+not fire**:
+
+| Subsystem | The threshold | What measurement revealed |
+|---|---|---|
+| Budget tiers (S5.5a) | 8,000 / 4,000 / 1,500 ms | Querying *every* source costs 1,050 ms. Even the tightest tier had 1.4x headroom, so admission control could never reject anything and `budget_exhausted` could never fire |
+| Memory recency (S10.3) | "confirmed fault in the last 7 days" | 150 incidents spanned 6 days across 3 machines, so the condition was true for **86.7%** of incidents. Not a condition -- a constant. Ablation A3 would have measured nothing |
+| Tier 3 gate (S11.1a) | "prior fault within 7 days" | Filtered 20.0% down to 18.7%, i.e. barely. The window was wider than the dataset |
+
+### The lesson, stated generally
+
+> A threshold expressed in units that nothing has yet measured cannot be wrong, and
+> therefore cannot be right either. Tests confirm that such a branch is reachable
+> in principle; only arithmetic against measured data shows whether it is reachable
+> in practice.
+
+In all three cases the tests passed. What caught the failure was arithmetic against
+a real number -- PaDiM's 161 ms, the dataset's actual time span, the observed
+false-alarm density. **No test we would plausibly have written would have caught
+any of them**, because each branch was individually correct and the defect was in
+the relationship between a constant and a distribution.
+
+### What we changed as a result
+
+1. Every threshold is measured against the data distribution it discriminates over
+   **before** the code that depends on it is written.
+2. Firing rates for every gate are asserted in tests with target bands, so a later
+   change that quietly drives a rate to zero fails loudly (`no_oracle_rate`,
+   `test_no_severity_tier_permits_the_exhaustive_sweep`, the Tier 3 demo assertion).
+3. Parameters that only make sense relative to data carry a version string that
+   travels with results (`budget-v1`, `logodds-v1`, `HARNESS_VERSION`).
+
+This is a genuine methodological contribution of the project, and it is worth more
+marks stated plainly than a claim that everything worked first time.
 
 ## 21. Resource Index
 

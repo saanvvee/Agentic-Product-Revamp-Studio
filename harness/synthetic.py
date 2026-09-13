@@ -286,6 +286,32 @@ def _telemetry_row(machine: Machine, is_anomalous: bool, rng: random.Random) -> 
 # The generator
 # --------------------------------------------------------------------------
 
+INCIDENT_SPACING_HOURS = 6
+"""Hours between consecutive incidents. A LOAD-BEARING parameter, not cosmetic.
+
+Measured consequence of getting it wrong (PRD v1.6). At the original 1 hour, 150
+incidents spanned 6 days across 3 machines, so every machine always had a recent
+prior fault and every memory rule keyed on recency became a CONSTANT rather than a
+condition:
+
+    rule "confirmed fault in last 7 days"   fired on 86.7% of incidents
+    rule ">=3 false alarms in 30 days"      fired on 28.7%
+    Tier 3 gate "prior fault within 7 days" filtered 20.0% -> 18.7%, i.e. barely
+
+The 7-day window was wider than the entire dataset's 6-day span. A3 (memory
+disabled) would therefore have measured almost nothing, and A3 is the ablation
+that defends the memory agent's existence.
+
+At 6 hours the same 150 incidents span 37 days -- plausible for a small facility --
+and the rules discriminate: 26.0% and 2.0% respectively. Changing this value
+changes every memory-dependent result, so it travels with HARNESS_VERSION.
+
+This is the THIRD occurrence of one pattern: a threshold that could not
+discriminate because the data had no range to discriminate over. The others were
+the inert budget table and the unfalsifiable placeholder latencies. Recorded in
+the PRD as a recurring methodological lesson rather than three anecdotes.
+"""
+
 SPLIT_SIZES: dict[Split, int] = {Split.DEV: 50, Split.TEST: 150, Split.DEMO: 8}
 """PRD S7.7. Dev for prompt iteration, test frozen for reported results, demo
 hand-sized for the five scenarios in S3.2."""
@@ -416,7 +442,7 @@ class SyntheticEventSource:
         return IncidentRecord(
             incident_id=f"{split.value}_{index:04d}",
             machine_id=machine.machine_id,
-            timestamp=self._start + timedelta(hours=index),
+            timestamp=self._start + timedelta(hours=INCIDENT_SPACING_HOURS * index),
             audio_clip_path=paths["audio_clip_path"],
             image_path=paths["image_path"],
             telemetry_row=_telemetry_row(machine, is_anomalous, rng),

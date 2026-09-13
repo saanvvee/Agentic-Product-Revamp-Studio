@@ -23,7 +23,10 @@ SCHEMA_VERSION = "1.2"
 precision can separate 'correctly declined an impossible incident' from 'gave up
 on a merely hard one' (PRD v1.4)."""
 
-HARNESS_VERSION = "1.0"
+HARNESS_VERSION = "1.1"
+"""1.1 changed INCIDENT_SPACING_HOURS from 1 to 6 (PRD v1.6). At 1 hour the
+memory-recency rules fired on up to 86.7% of incidents and were constants rather
+than conditions, which would have made ablation A3 measure nothing."""
 
 REFERENCE_RULE_VERSION = "logodds-v1"
 """The fusion rule used to decide oracle sufficiency (PRD S7.5b).
