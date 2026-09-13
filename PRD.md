@@ -2,8 +2,8 @@
 
 **Course:** CSE3101 Agentic AI (BML Munjal University, 2026-27, 7th Semester)
 **Faculty:** Dr. Soharab Hossain Shaikh, Mr. Pranshu Tiwari
-**Document version:** 1.4
-**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.4)
+**Document version:** 1.5
+**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.5)
 **Semester window:** 27 July 2026 to 20 November 2026
 **Status:** Ready for Phase-1 submission
 
@@ -59,6 +59,12 @@
 | 1.4 | Declared cost documented as a **model parameter**, not a measurement (S5.5a) | Measured PaDiM latency differs between dev CPU and eval GPU; without the distinction a reader would see cost fall and think the budget moved |
 | 1.4 | **Pre-commit hook** blocking dataset bytes and secrets (`scripts/pre-commit`, R17) | R17 nearly fired twice from unpredicted paths, caught only by manual audit. Habits degrade under deadline pressure; this converts discipline into a guarantee |
 | 1.4 | PaDiM measured: 33.9 s fit, **161 ms/image**, AUROC 0.930 (S8.2) | Validates `DECLARED_COST_MS[VISION]` of 200 ms, set before measurement. Closes R12 |
+| **1.5** | **Budget table recalibrated to 900/600/250 ms** (S5.5a, `core/config.py`) | The v1.1 placeholders made the budget INERT -- all five sources cost 1,050 ms against a 1,500 ms floor, so admission control was dead code and the project's central claim was untestable |
+| 1.5 | Five terminal reasons, adding **`no_affordable_source`** and `steps_exhausted` (S5.5a) | Stranded budget is not exhaustion: one wants a bigger budget, the other a cheaper source. Conflating them corrupts the decision log |
+| 1.5 | A rejected admission **consumes an evidence step** (S5.5a) | Planning is not free; termination then falls out of the existing bound instead of needing a new counter |
+| 1.5 | Parallel admission all-or-nothing, with **availability logged apart from choice** (S5.5a) | "Prefers sequential under pressure" is orchestrator behaviour OR admission mechanism, and logging only the choice makes them unrecoverable |
+| 1.5 | **Fast path uses the same budget, no exception** (S5.5a) | Its cheapness must be emergent, or cross-path cost comparisons measure different things. v1.4 was silent on the path that handles most incidents |
+| 1.5 | `scripts/check_setup.py` verifies `core.hooksPath` is set | README instructions get skimmed, and the hook is per-clone config git does not distribute -- two of three clones could silently lack it |
 
 ---
 
@@ -469,8 +475,90 @@ on the evidence held, or escalate to a human. Running out of budget is a legitim
 not an error.
 
 **Recorded per incident** in `decisions.jsonl`: starting budget, every debit with its source, the
-remaining balance at each decision, and the terminal reason (`resolved` / `budget_exhausted` /
-`escalated`).
+remaining balance at each decision, and the terminal reason.
+
+##### The four cases v1.4 left unspecified, now decided
+
+v1.4 described escalation and parallel admission and was silent on everything
+else. Implemented in `core/budget.py`, each decision documented at its point of
+enforcement and covered by a test.
+
+**Decision 1 -- admission rejection with budget remaining is NOT exhaustion.**
+There are **five** terminal reasons, not three:
+
+| Reason | Meaning |
+|---|---|
+| `resolved` | The critic accepted the evidence. Wins over every exhaustion reason |
+| `budget_exhausted` | Spend reached the limit; nothing was affordable at any price |
+| `no_affordable_source` | **Budget REMAINS, but every ungathered source costs more than what is left** |
+| `steps_exhausted` | Hit `max_evidence_steps`, independently of cost |
+| `escalated` | Handed to a human |
+
+`no_affordable_source` is distinct because the remedy differs: exhaustion wants a
+bigger budget, a stranded balance wants a cheaper source. Conflating them would
+corrupt the one artifact whose entire purpose is explaining why the system
+stopped.
+
+**Decision 2 -- a rejected admission consumes an evidence step.** Planning is not
+free, and this makes the termination guarantee fall out of the existing
+`max_evidence_steps` bound rather than needing a second counter: a system that
+keeps proposing unaffordable groups terminates on `steps_exhausted` instead of
+spinning. One exception, and it is deliberate: re-requesting an
+already-gathered source (forbidden by S11.3) does **not** consume a step, because
+that is a critic logic error rather than a budget event, and charging a step
+would hide the bug behind a plausible-looking termination.
+
+**Decision 3 -- parallel admission is all-or-nothing, and availability is logged
+separately from choice.** A group that does not fit is rejected whole; the caller
+may re-plan something smaller at the cost of another step.
+
+The instrumentation matters more than the rule. "The orchestrator prefers
+sequential under budget pressure" reads as an adaptive finding but could be pure
+admission-control artifact, and if only the *choice* is logged the two are
+unrecoverable. So `assess_paths()` records, at **every** path decision and without
+consuming a step, whether each path was available. Two rates are then reportable:
+
+| Reported rate | What it is |
+|---|---|
+| Parallel **chosen when available** | Orchestrator **behaviour** |
+| Parallel **unavailable by admission** | **Mechanism** |
+
+A large second number is itself a finding worth a paragraph: under budget
+pressure the design structurally forces sequential investigation.
+
+**Decision 4 -- the fast path draws from the same budget, with no exception.**
+Its cheapness must be an *emergent property* of querying one source, never a
+special case in the accounting. Otherwise cross-path cost comparisons are not
+measuring the same thing, and the fast path -- which will handle most incidents --
+would sit outside the cost model entirely. A fast-path request consumes a step
+and debits measured cost exactly like any other.
+
+##### The budget table was inert, and measurement found it
+
+The v1.1 figures (8,000 / 4,000 / 1,500 ms) were placeholders written before any
+cost existed. Once PaDiM was measured, arithmetic showed they made the budget
+**unable to bind at all**: querying *every* source costs 1,050 ms, so even the
+tightest tier had 1.4x headroom over the absolute worst case.
+
+Admission control could never reject anything, `budget_exhausted` could never
+fire, `no_affordable_source` was unreachable, and **"budget-aware orchestration"
+-- the project's central claim -- was untestable.** An examiner asking to see one
+incident where the budget changed the decision would have had nothing to show.
+
+Recalibrated so each tier forbids something different:
+
+| Tier | `budget_ms` | Parallel trio (350) | Sequential trio (600) | All five (1,050) |
+|---|---|---|---|---|
+| `critical` | 900 | fits | fits | **rejected** |
+| `standard` | 600 | fits | fits exactly | rejected |
+| `low` | 250 | **rejected** | rejected | rejected |
+
+`low` is therefore the tier where admission control forces sequential
+investigation and the parallel path becomes structurally unavailable -- which is
+precisely the mechanism decision 3 instruments. `standard` binds exactly at the
+sequential trio, making exhaustion reachable on a fourth source. `critical` is
+generous but still refuses the exhaustive sweep, so **no tier permits everything**,
+asserted per-severity in `tests/test_budget.py`.
 
 ### 5.6 Three paths, specified
 

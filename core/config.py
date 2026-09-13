@@ -59,11 +59,42 @@ class BudgetSettings(BaseModel):
 
     table: dict[Severity, BudgetAllocation] = Field(
         default_factory=lambda: {
-            Severity.CRITICAL: BudgetAllocation(budget_ms=8_000, budget_tokens=6_000),
-            Severity.STANDARD: BudgetAllocation(budget_ms=4_000, budget_tokens=3_000),
-            Severity.LOW: BudgetAllocation(budget_ms=1_500, budget_tokens=1_000),
+            Severity.CRITICAL: BudgetAllocation(budget_ms=900, budget_tokens=6_000),
+            Severity.STANDARD: BudgetAllocation(budget_ms=600, budget_tokens=3_000),
+            Severity.LOW: BudgetAllocation(budget_ms=250, budget_tokens=1_000),
         }
     )
+    """Recalibrated against MEASURED detector costs (PRD v1.5).
+
+    The v1.1 figures (8000/4000/1500 ms) were placeholders written before any
+    cost existed, and measurement showed they made the budget INERT: querying
+    every source costs 1,050 ms, so even the tightest tier had 1.4x headroom over
+    the absolute worst case. Admission control could never reject anything,
+    `budget_exhausted` could never fire, and "budget-aware orchestration" -- the
+    project's central claim -- was untestable. An examiner asking to see an
+    incident where the budget changed the decision would have had nothing.
+
+    Each tier now makes a DIFFERENT thing impossible, against declared costs of
+    telemetry/memory 50, vision 200, audio 350, manual 400:
+
+    | Tier | ms | Parallel trio (max 350) | All three sequentially (600) | All five (1050) |
+    |---|---|---|---|---|
+    | critical | 900 | fits | fits | **rejected** (needs 1,050) |
+    | standard | 600 | fits | fits exactly | rejected |
+    | low | 250 | **rejected** | rejected | rejected |
+
+    So: `low` is the tier where admission control forces sequential and the
+    parallel path becomes structurally unavailable -- the mechanism that must be
+    logged separately from orchestrator preference, or it reads as an adaptive
+    finding when it is an artifact. `standard` binds at exactly the sequential
+    trio, making budget exhaustion reachable on a fourth source. `critical` is
+    generous but still refuses the exhaustive sweep, so no tier permits
+    everything.
+
+    Token budgets are unchanged and remain non-binding by design: tokens are
+    measured, never budgeted (PRD S5.5b). They are retained only so the
+    orchestrator's prompt can report them.
+    """
 
     @model_validator(mode="after")
     def _all_severities_present(self) -> "BudgetSettings":

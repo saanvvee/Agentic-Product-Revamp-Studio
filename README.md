@@ -72,9 +72,29 @@ whole system switches from local to hosted by changing one line.
 py -3.11 -m venv .venv
 .venv/Scripts/activate          # Windows;  source .venv/bin/activate elsewhere
 pip install -r requirements.txt
+pip install -e .
 
 cp config/default.env .env      # then edit
+
+git config core.hooksPath scripts   # REQUIRED -- see below
+python scripts/check_setup.py       # verifies the above
 ```
+
+### The hook is not optional
+
+`git config core.hooksPath scripts` enables a pre-commit hook that refuses to
+commit dataset bytes, model weights, or anything resembling a secret.
+
+**It is per-clone configuration that git does not distribute**, so every teammate
+must run it on their own clone. This repository is public and MVTec AD is
+CC BY-NC-SA, so the hook is the only thing standing between us and a licence
+violation. It has already caught two real near-misses from paths nobody
+predicted: anomalib downloads to `datasets/` rather than the `data/` we planned
+for, and it writes derived MVTec images under `artifacts/` where a routine
+`git add -A` staged 115 of them.
+
+`python scripts/check_setup.py` fails with exit 1 if the hook is not enabled. Run
+it after cloning and whenever something feels off.
 
 Python **3.11** specifically — see `.python-version`.
 
