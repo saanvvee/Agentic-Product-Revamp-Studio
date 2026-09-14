@@ -81,7 +81,8 @@
 | 1.7 | Memory store takes a mandatory `as_of` and bounds queries strictly below it | Replaying an eval set would otherwise let an incident see its own future and inflate every memory effect |
 | 1.7 | **`memory/clock.py`: `as_of` may only be derived from the incident record**, asserted per incident | The bound is only as good as its input. Wall-clock would satisfy it and be useless, placing every past incident inside every window -- silently, without raising, producing better numbers |
 | 1.7 | `CONFIRMED_FAULT_WINDOW` documented as an **experimental-design choice** (S10.3) | "Why 2 days and not 3" has a real answer about attribution in A3, which is a better exchange than a parameter defence |
-| 1.7 | **S20.2 added**: what dual implementations actually bought | The SQLite/in-memory idempotency divergence is the concrete payoff, and worth more than an abstract modularity claim. Reports honestly that it paid off in one seam of four |
+| 1.7 | **S20.2 added**: what dual implementations actually bought | The SQLite/in-memory idempotency divergence is the concrete payoff, and worth more than an abstract modularity claim. Cost stated alongside the catch |
+| 1.7 | **`before_tool_callback` VERIFIED to block, not observe** (S11.2a) | The highest-stakes unverified assertion in the PRD: a guardrail that logs without blocking is a false safety claim. Tested by side-effect absence, not callback firing. Also records that the agent receives the block as a tool response and stops, rather than retrying around it |
 
 ---
 
@@ -1467,6 +1468,51 @@ Tier 2 (dispatch). Only Tier 3 consults memory.
 
 Use `before_tool_callback` to intercept tool calls. If the requested action is Tier 3, block execution and trigger the HITL pause. ADK 2.0's workflow runtime has built-in human-in-the-loop pause and resume, so the workflow suspends cleanly and resumes on approval.
 
+#### 11.2a VERIFIED: the callback blocks, it does not merely observe
+
+This was the **highest-stakes unverified assertion left in the PRD**. Every other
+threshold that turned out degenerate cost us a metric; a guardrail that logs a
+block without blocking is **a safety claim that is false**, and it is the one an
+examiner is most likely to test live by asking us to trigger it.
+
+**Verified the hard way, 14 September 2026** -- not "did the callback fire" but
+"did the tool's side effect fail to happen". A callback returning a value the
+framework ignored would pass a fire-check and fail this one. The probe tool wrote
+to a module-level ledger AND appended to a file; both were checked afterwards.
+
+```
+callback fired      : 1 time(s) -> ['halt_production_line']
+SIDE EFFECT (memory): []
+SIDE EFFECT (file)  : '<no file>'
+VERDICT: BLOCKED (side effect absent)
+```
+
+**Mechanism, read from `flows/llm_flows/_tool_caller.py`:** a `before_tool_callback`
+returning a non-`None` dict becomes the `function_response`, and the tool itself is
+invoked only `if function_response is None`. Blocking is therefore structural, not
+advisory -- `tool_runner()` is never reached.
+
+**What the agent receives, which matters as much.** The block arrives as an ordinary
+tool RESPONSE, not as an error:
+
+```
+CALL: halt_production_line
+RESP: {"status": "BLOCKED_PENDING_HUMAN_APPROVAL", "tier": 3, ...}
+TEXT: The production line halt for zone_a_fan_00 is pending human approval.
+      Please authorize the halt to proceed.
+```
+
+The agent treated it as a **terminal state and stopped**, rather than retrying,
+rephrasing, or routing around it. That is the behaviour a safety story needs: a
+deterministic outcome, not a negotiation. Had ADK surfaced an error the model could
+see and react to, the agent might have argued with the guardrail -- a worse failure
+than a broken callback, because it would look like the system working.
+
+**Fallback if this ever changes** (ADK's A2A layer is already self-declared
+EXPERIMENTAL): wrap the dispatch client itself, so the guard lives BELOW the
+framework rather than inside it. Less elegant, equally sound. Recorded here so the
+decision does not have to be made under pressure.
+
 ### 11.3 Additional guardrails
 
 - **Input guardrail:** reject malformed or out-of-range sensor payloads before they reach any LLM
@@ -1974,10 +2020,14 @@ hand-waved; here it has a specific payoff worth one paragraph:
 > implementation cannot surface that class of defect, because there is nothing to
 > disagree with.
 
-The same discipline caught nothing in the LLM seam and nothing in the event-source
-seam, and that is worth reporting too: the cost of the discipline is real and it
-paid off once in four seams. Report the ratio honestly rather than implying every
-seam earned its keep.
+**State the cost and the catch; let the reader judge.** The discipline is cheap --
+a second implementation of a narrow protocol, plus one parametrised test file per
+seam -- and it caught one silent divergence that would have corrupted a headline
+ablation. It surfaced no defect in the LLM or event-source seams, but those are
+load-bearing for other reasons anyway (the one-line local-to-API switch, and
+replay reproducibility), and which seam would diverge was not knowable in advance.
+Report the cost and the catch as facts rather than computing a hit rate, which
+would imply the other seams were speculative when they were not.
 
 ## 20.1 Report section 12.1: thresholds in unmeasured units
 
