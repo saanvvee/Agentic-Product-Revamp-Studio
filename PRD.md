@@ -79,6 +79,9 @@
 | 1.7 | **Memory rules measured and frozen as `memrules-v1`** (S10.3, `memory/base.py`) | 26.0% / 2.0% / 2.0%, mutually disjoint (union exactly 45). A3 ablates three separable mechanisms |
 | 1.7 | `lower_threshold` window set to **2 days, not 3**, deliberately | At 3 days the Tier 3 incidents become a strict subset of it and A3 cannot attribute effects separately |
 | 1.7 | Memory store takes a mandatory `as_of` and bounds queries strictly below it | Replaying an eval set would otherwise let an incident see its own future and inflate every memory effect |
+| 1.7 | **`memory/clock.py`: `as_of` may only be derived from the incident record**, asserted per incident | The bound is only as good as its input. Wall-clock would satisfy it and be useless, placing every past incident inside every window -- silently, without raising, producing better numbers |
+| 1.7 | `CONFIRMED_FAULT_WINDOW` documented as an **experimental-design choice** (S10.3) | "Why 2 days and not 3" has a real answer about attribution in A3, which is a better exchange than a parameter defence |
+| 1.7 | **S20.2 added**: what dual implementations actually bought | The SQLite/in-memory idempotency divergence is the concrete payoff, and worth more than an abstract modularity claim. Reports honestly that it paid off in one seam of four |
 
 ---
 
@@ -1953,6 +1956,28 @@ Independent of the project. Revise agent fundamentals, ReAct, CoT, ToT, self-con
 15. Individual contributions
 
 ---
+
+## 20.2 Report: what dual implementations actually bought
+
+**Put the concrete case in the report, not an abstract claim about modularity.**
+Every seam in this system has at least two implementations and a contract test
+that runs against both (PRD S14.4). The argument for that discipline is usually
+hand-waved; here it has a specific payoff worth one paragraph:
+
+> The memory store has two implementations, SQLite and in-memory, and a contract
+> test that runs every query against both. On first run they disagreed:
+> `SqliteStore` used `INSERT OR REPLACE` and was idempotent, while `InMemoryStore`
+> appended to a list and counted a re-recorded incident three times. Because
+> ablation A3 disables memory and attributes the difference to the memory agent,
+> **an undetected divergence between the two stores would have meant A3 measured
+> the storage backend rather than the mechanism under study.** A seam with one
+> implementation cannot surface that class of defect, because there is nothing to
+> disagree with.
+
+The same discipline caught nothing in the LLM seam and nothing in the event-source
+seam, and that is worth reporting too: the cost of the discipline is real and it
+paid off once in four seams. Report the ratio honestly rather than implying every
+seam earned its keep.
 
 ## 20.1 Report section 12.1: thresholds in unmeasured units
 

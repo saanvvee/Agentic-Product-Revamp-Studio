@@ -317,3 +317,58 @@ def test_disabled_wins_over_impl(monkeypatch):
     monkeypatch.setenv("IRA_MEMORY__ENABLED", "false")
     monkeypatch.setenv("IRA_MEMORY__IMPL", "in_memory")
     assert isinstance(build_memory_store(Settings()), DisabledStore)
+
+
+# --------------------------------------------------------------------------
+# Where as_of comes from: the remaining leak surface
+# --------------------------------------------------------------------------
+
+
+def test_as_of_is_sourced_from_the_incident_not_the_clock():
+    """The guard is only as good as its input.
+
+    Bounding queries below as_of is tested above. This tests the other half: that
+    as_of is the incident's OWN timestamp. Wall-clock would satisfy the bound and
+    be useless, placing every past incident inside every window -- a silent
+    inflation of every memory effect that would not raise and would not fail a
+    test.
+    """
+    from datetime import datetime, timezone
+
+    from harness.synthetic import SyntheticEventSource
+    from memory.clock import ClockLeakError, as_of_for, assert_no_clock_leak
+    from schemas.incident import Split
+
+    incident = next(iter(SyntheticEventSource(seed=0).events(Split.DEV)))
+
+    assert as_of_for(incident) == incident.timestamp
+    assert_no_clock_leak(incident, as_of_for(incident))  # must not raise
+
+    wall_clock = datetime.now(timezone.utc)
+    with pytest.raises(ClockLeakError, match="wall-clock"):
+        assert_no_clock_leak(incident, wall_clock)
+
+
+def test_wall_clock_would_inflate_every_memory_effect():
+    """Demonstrates WHY the assertion exists, rather than asserting it abstractly.
+
+    Same store, same three false alarms, two values of as_of. Judged at the
+    incident's own timestamp the history is empty and the rule does not fire;
+    judged at a later wall-clock time all three fall inside the 30-day window and
+    it does. Nothing raises in either case -- which is exactly the problem.
+    """
+    store = InMemoryStore()
+    for i in range(3):
+        # Recorded 5, 6 and 7 days before NOW.
+        store.record(
+            outcome(incident_id=f"past{i}", days_ago=5 + i, verdict=True, truth=False)
+        )
+
+    # An incident that occurred BEFORE those records: nothing to remember yet.
+    incident_time = NOW - timedelta(days=10)
+    assert not store.history_for(MACHINE, as_of=incident_time).downgrade_priority
+
+    # The same query at wall-clock time sweeps all three in.
+    assert store.history_for(MACHINE, as_of=NOW).downgrade_priority
+
+    store.close()
