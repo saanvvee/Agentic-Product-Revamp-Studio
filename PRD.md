@@ -2,8 +2,8 @@
 
 **Course:** CSE3101 Agentic AI (BML Munjal University, 2026-27, 7th Semester)
 **Faculty:** Dr. Soharab Hossain Shaikh, Mr. Pranshu Tiwari
-**Document version:** 1.6
-**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.6)
+**Document version:** 1.7
+**Date:** 13 September 2026 (v1.0), amended 13-14 September 2026 (v1.1-v1.7)
 **Semester window:** 27 July 2026 to 20 November 2026
 **Status:** Ready for Phase-1 submission
 
@@ -74,6 +74,11 @@
 | 1.6 | **Demo split hand-CONSTRUCTED**, 12 incidents (S7.7, `harness/demo_builder.py`) | The sampled 8-incident split could never trigger Scenario D. Test must be representative, demo must be complete, and sampling achieves only the first |
 | 1.6 | `eval/split_guard.py` refuses to aggregate over constructed incidents | Non-representative by design; it would poison any results table it reached |
 | 1.6 | **Recurring-pattern lesson promoted to report S12.1** (S20.1) | Three occurrences of one failure -- thresholds in unmeasured units -- is a methodological finding, not three anecdotes |
+| **1.7** | **Scenario F named** in S3.2: correlated sensor failure | Found while building the demo split, not designed. It is the honest limit of the whole method -- cross-modal corroboration fails when the modalities fail together -- and saying it ourselves is far better than an examiner saying it |
+| 1.7 | S20.1 extended to **four occurrences** plus the base-rate corollary | The memory-recency rule at 86.7% is the most consequential instance: A3 would have produced a confident null result. Also records the two DIRECTIONS of the failure (inert vs degenerate) and that a count threshold must be checked against the base rate, not only the window |
+| 1.7 | **Memory rules measured and frozen as `memrules-v1`** (S10.3, `memory/base.py`) | 26.0% / 2.0% / 2.0%, mutually disjoint (union exactly 45). A3 ablates three separable mechanisms |
+| 1.7 | `lower_threshold` window set to **2 days, not 3**, deliberately | At 3 days the Tier 3 incidents become a strict subset of it and A3 cannot attribute effects separately |
+| 1.7 | Memory store takes a mandatory `as_of` and bounds queries strictly below it | Replaying an eval set would otherwise let an incident see its own future and inflate every memory effect |
 
 ---
 
@@ -190,7 +195,27 @@ The system concludes the correct action is to halt a production line. The guardr
 **Scenario E: Repeat offender (memory)**
 A zone that produced four false alarms last month generates another borderline reading. The memory agent surfaces that history and the orchestrator lowers its escalation priority.
 
-Scenarios A, B, C, and E are your demo script. Scenario D is your safety story. Rehearse all five.
+**Scenario F: correlated sensor failure (the honest limit of this approach)**
+Every modality reads normal on a machine that is genuinely faulty -- or every
+modality reads anomalous on one that is fine. No subset of evidence resolves the
+incident, because cross-modal corroboration only works when the modalities fail
+*independently*. The correct behaviour is to decline: "I cannot determine this,
+escalate to a human."
+
+**This scenario is the limit of the whole method and we state it ourselves.** The
+premise of multi-modal corroboration is that independent sensors are unlikely to
+be wrong together; when that assumption fails, more evidence cannot help and a
+confident answer is wrong even when it happens to be right. Constructed
+deliberately at ~7% of incidents (S7.5a) and it is the ground truth for escalation
+precision (S12.1).
+
+It was found rather than designed: while building the demo split we discovered that
+an intended Scenario E false alarm had all three sources reading anomalous on a
+normal incident, making it unresolvable rather than merely wrong. Separating the
+two cases is what made both measurable.
+
+Scenarios A, B, C, and E are your demo script. Scenario D is your safety story.
+Scenario F is your limitations slide. Rehearse all six.
 
 ---
 
@@ -1947,6 +1972,8 @@ not fire**:
 | Budget tiers (S5.5a) | 8,000 / 4,000 / 1,500 ms | Querying *every* source costs 1,050 ms. Even the tightest tier had 1.4x headroom, so admission control could never reject anything and `budget_exhausted` could never fire |
 | Memory recency (S10.3) | "confirmed fault in the last 7 days" | 150 incidents spanned 6 days across 3 machines, so the condition was true for **86.7%** of incidents. Not a condition -- a constant. Ablation A3 would have measured nothing |
 | Tier 3 gate (S11.1a) | "prior fault within 7 days" | Filtered 20.0% down to 18.7%, i.e. barely. The window was wider than the dataset |
+| **Memory recency, A3 (S10.3)** | **"confirmed fault in the last 7 days"** | **Fired on 86.7% of incidents.** Not a condition -- a CONSTANT. Ablation A3 would have compared "memory says yes" against "memory says yes" for six incidents in seven, and produced a confident null result that meant nothing. **This is the most consequential instance**, because A3 is the ablation that defends the memory agent's existence |
+| False-alarm count (S10.3) | ">= 3 false alarms in **7** days" (a mis-tuning during testing) | Fired on **0.0%**. Only 11 false alarms occur across 3 machines in 150 incidents -- about one per machine per 18 days -- so >=3 within any 7-day window is **arithmetically impossible**, not merely unlikely. Corrected back to the PRD's original 30 days |
 
 ### The lesson, stated generally
 
@@ -1954,6 +1981,22 @@ not fire**:
 > therefore cannot be right either. Tests confirm that such a branch is reachable
 > in principle; only arithmetic against measured data shows whether it is reachable
 > in practice.
+
+**The two directions of the same failure.** A threshold can be inert because
+nothing ever crosses it, or degenerate because everything always does. Both look
+identical in code and both pass every test:
+
+| Direction | Example | Symptom |
+|---|---|---|
+| **Inert** | Budget tiers; ">=3 false alarms in 7 days" | Rate ~0%. Mechanism never fires; branch is dead code |
+| **Degenerate** | "confirmed fault in 7 days" at 86.7% | Rate ~100%. Condition is a constant; the ablation measures nothing |
+
+**A corollary worth stating separately: a threshold on a COUNT must be checked
+against the base rate of the thing being counted, not only against the window
+width.** ">=3 false alarms in 7 days" is not a strict condition -- it is an
+impossible one, given that the data contains roughly one false alarm per machine
+per 18 days. Checking the window alone would never have revealed that; only
+counting the events did.
 
 In all three cases the tests passed. What caught the failure was arithmetic against
 a real number -- PaDiM's 161 ms, the dataset's actual time span, the observed
@@ -1969,7 +2012,13 @@ the relationship between a constant and a distribution.
    change that quietly drives a rate to zero fails loudly (`no_oracle_rate`,
    `test_no_severity_tier_permits_the_exhaustive_sweep`, the Tier 3 demo assertion).
 3. Parameters that only make sense relative to data carry a version string that
-   travels with results (`budget-v1`, `logodds-v1`, `HARNESS_VERSION`).
+   travels with results (`budget-v1`, `logodds-v1`, `memrules-v1`, `HARNESS_VERSION`).
+4. Where two rules could overlap, the overlap is measured before either is built.
+   The three memory rules are mutually disjoint on the test split (39 + 3 + 3 = 45,
+   exactly their union), so A3 ablates three separable mechanisms -- but that is a
+   property of the chosen window widths, not a guarantee. At a 3-day window instead
+   of 2, the Tier 3 incidents become a strict subset of `lower_threshold` and A3
+   loses the ability to attribute effects separately.
 
 This is a genuine methodological contribution of the project, and it is worth more
 marks stated plainly than a claim that everything worked first time.
