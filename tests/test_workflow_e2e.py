@@ -184,3 +184,30 @@ async def test_human_approval_pauses_and_blocks_rejected_items(kb_path):
     assert len(asked) == 1 and asked[0]["items"][0]["id"] == "EN1-1"
     assert "EN1-1" not in {i.proposal_id for i in res.plan.items}
     assert res.record.status == "done"
+
+
+async def test_metrics_and_report(kb_path, monkeypatch, tmp_path):
+    from revamp import report
+    from revamp.evaluation import run_metrics, summarise
+    from revamp.products import load_product
+    from revamp.settings import settings
+
+    overrides, _ = scripted()
+    a1 = await run_engagement(PRODUCT, "A1", kb_path=kb_path, overrides=overrides)
+    a2 = await run_engagement(PRODUCT, "A2", kb_path=kb_path, overrides=scripted()[0])
+    ev = KnowledgeBase(kb_path, "evaluator")
+    prod = load_product(PRODUCT)
+    m1 = run_metrics(a1.record.run_id, ev, prod, a1.stats)
+    m2 = run_metrics(a2.record.run_id, ev, prod, a2.stats)
+    # Without arbitration the pricing item survives and violates the hidden constraint;
+    # the full system negotiated it away.
+    assert m1.hidden_violations == 1 and m2.hidden_violations == 0
+    assert m2.client_accepted and not m1.client_accepted
+    assert m2.citation_invalid_rate > 0  # the invented citation was counted
+    with pytest.raises(PermissionError):
+        run_metrics(a2.record.run_id, KnowledgeBase(kb_path, "team"), prod, a2.stats)
+    table = summarise([m1, m2])
+    assert "| umami | A1 |" in table and "| umami | A2 |" in table
+    html = report.render(a2.record.run_id, kb_path)
+    assert "Sequenced plan" in html and "Conflict register" in html
+    assert "Board has frozen pricing" not in html  # private text never reaches the report

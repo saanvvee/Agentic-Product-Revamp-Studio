@@ -15,7 +15,9 @@ Sev = Literal["low", "medium", "high", "critical"]
 
 
 class EngagementBrief(BaseModel):
-    focus: list[str] = Field(description="2-4 problem areas to prioritise, most important first")
+    focus: list[str] = Field(min_length=1, max_length=4,
+                             description="2-4 problem AREA NAMES (e.g. security, onboarding, "
+                                         "performance), most important first. Not finding ids.")
     rationale: str
     budget_note: str = ""
 

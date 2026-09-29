@@ -52,8 +52,11 @@ def _inner(family: str) -> BaseLlm:
         return Gemini(model=settings.gemini_model)
     from google.adk.models.lite_llm import LiteLlm
     # The ollama_chat/ prefix is mandatory: plain ollama/ silently drops tool calls.
-    # num_ctx: Ollama's default context is small; evidence lists need ~8-12k tokens.
-    return LiteLlm(model=settings.local_model, num_ctx=16384)
+    # num_ctx: Ollama's default context is small; our prompts are ~2-4k tokens.
+    # reasoning_effort="none": LiteLLM maps it to Ollama's think=false. Without it
+    # qwen3 "thinks" for many minutes on a CPU before answering (a single call hit
+    # LiteLLM's 600 s timeout on 29 Sep; the same call with think=false took ~20 s).
+    return LiteLlm(model=settings.local_model, num_ctx=8192, reasoning_effort="none")
 
 
 _SCRATCH: Path | None = None

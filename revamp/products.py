@@ -67,3 +67,18 @@ def load_product(name: str, directory: Path | None = None) -> Product:
 
 def list_products(directory: Path | None = None) -> list[str]:
     return sorted(p.stem for p in (directory or settings.products_dir).glob("*.yaml"))
+
+
+def load_constraints(name: str, directory: Path | None = None):
+    """Private client constraints for a product, from products/constraints/<name>.yaml.
+
+    These files are the evaluation's hidden ground truth. They must be written
+    BEFORE any evaluation run, by someone who did not write the agent prompts, and
+    committed so their timestamp shows it (PLAN Section 6, circularity).
+    """
+    from revamp.contracts import ClientConstraint
+    path = (directory or settings.products_dir) / "constraints" / f"{name}.yaml"
+    if not path.is_file():
+        return []
+    rows = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+    return [ClientConstraint(product=name, **r) for r in rows]

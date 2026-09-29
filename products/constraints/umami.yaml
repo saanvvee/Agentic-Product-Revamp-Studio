@@ -1,0 +1,25 @@
+# PRIVATE client constraints for umami. Read only by the Client (and the evaluator).
+#
+# !!! DEMO SET. Written by the AI assistant that also wrote the agent prompts, so it
+# !!! is NOT valid for evaluation (circularity, PLAN Section 6). Before any evaluation
+# !!! run, a team member who has not read the prompts replaces this file and commits it.
+#
+# kind: forbid_area | require_area | max_total_days | max_risk | forbid_team
+- id: K-umami-1
+  kind: forbid_area
+  param: pricing_page
+  reason_code: brand
+  description: The founders promised the community that pricing stays unchanged until v4.
+  public_hint: We have made public commitments about pricing that we cannot revisit now.
+- id: K-umami-2
+  kind: max_risk
+  param: medium
+  reason_code: risk
+  description: A two-person core team cannot absorb a high-risk migration this year.
+  public_hint: We cannot take on anything our small team could not safely roll back.
+- id: K-umami-3
+  kind: require_area
+  param: accessibility
+  reason_code: compliance
+  description: An EU public-sector customer requires an accessibility commitment (EAA 2025).
+  public_hint: One of our largest customers needs to see accessibility addressed.
