@@ -10,6 +10,9 @@ an uncached model (invariant 1).
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from google.adk.models.base_llm import BaseLlm
 
 from revamp.llm.cache import CachedLlm
@@ -49,14 +52,27 @@ def _inner(family: str) -> BaseLlm:
         return Gemini(model=settings.gemini_model)
     from google.adk.models.lite_llm import LiteLlm
     # The ollama_chat/ prefix is mandatory: plain ollama/ silently drops tool calls.
-    return LiteLlm(model=settings.local_model)
+    # num_ctx: Ollama's default context is small; evidence lists need ~8-12k tokens.
+    return LiteLlm(model=settings.local_model, num_ctx=16384)
+
+
+_SCRATCH: Path | None = None
+
+
+def _scratch_cache() -> Path:
+    global _SCRATCH
+    if _SCRATCH is None:
+        _SCRATCH = Path(tempfile.mkdtemp(prefix="revamp_scripted_"))
+    return _SCRATCH
 
 
 def model_for(agent: str, *, seed: int = 0, mode: str | None = None,
               override: BaseLlm | None = None) -> CachedLlm:
     """`override` swaps the inner model (tests pass a ScriptedLlm); it is still cached."""
     inner = override if override is not None else _inner(family_for(agent, mode))
-    cache_dir = settings.cache_dir if override is None else settings.cache_dir / "scripted"
+    # Scripted (fake) models get a throwaway cache: tests change their responders
+    # freely, and a persistent cache would replay stale fake answers.
+    cache_dir = settings.cache_dir if override is None else _scratch_cache()
     return CachedLlm(inner=inner, cache_dir=cache_dir, seed=seed,
                      read_only=settings.cache_read_only,
                      concurrency=settings.llm_concurrency)

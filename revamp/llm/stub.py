@@ -7,6 +7,7 @@ logic (loops, caps, routing) independently of model quality.
 
 from __future__ import annotations
 
+import uuid
 from typing import AsyncGenerator, Callable
 
 from google.adk.models.base_llm import BaseLlm
@@ -14,7 +15,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.models._capabilities import LlmCapabilities
 from google.genai import types
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 Responder = Callable[[LlmRequest], "str | types.Part | list[types.Part]"]
 
@@ -30,7 +31,8 @@ def last_user_text(req: LlmRequest) -> str:
 class ScriptedLlm(BaseLlm):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    model: str = "scripted"
+    # Unique per instance, so two stubs with different scripts never share cache keys.
+    model: str = Field(default_factory=lambda: f"scripted-{uuid.uuid4().hex[:8]}")
     responder: Responder
     calls: int = 0
 
