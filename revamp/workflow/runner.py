@@ -43,7 +43,11 @@ async def run_engagement(product: str, arm: str = "A2", seed: int = 0, *,
     record = RunRecord(run_id=run_id, product=product, arm=arm, seed=seed)
     rc = runs.RunContext(
         run_id=run_id, product=prod, arm=ARMS[arm], seed=seed,
-        team_kb=KnowledgeBase(kb_path, "team"), client_kb=KnowledgeBase(kb_path, "client"),
+        team_kb=KnowledgeBase(kb_path, "team"),
+        # With a remote Client, this process holds no client-role handle at all,
+        # except in A6, whose whole point is to show the constraints to the teams.
+        client_kb=(KnowledgeBase(kb_path, "client")
+                   if not settings.client_url or ARMS[arm].client_visible else None),
         crew=runs.Crew(seed=seed, mode=mode, overrides=overrides or {}), record=record,
         hitl=approver is not None)
     runs.register(rc)

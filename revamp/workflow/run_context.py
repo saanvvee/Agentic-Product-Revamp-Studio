@@ -62,7 +62,7 @@ class RunContext:
     arm: Arm
     seed: int
     team_kb: KnowledgeBase
-    client_kb: KnowledgeBase
+    client_kb: KnowledgeBase | None  # None when the Client runs as a remote A2A service
     crew: Crew
     record: RunRecord
     hitl: bool = False  # pause for human approval of high-impact items (B10)
