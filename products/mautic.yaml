@@ -1,0 +1,29 @@
+# Mautic: open-source marketing automation (PHP/Symfony).
+# Answer key: UX/UI Tiger Team work shipped as 6.0 "Orion" (26 Mar 2025).
+# No official SaaS pricing page: pricing analysis is against competitors only.
+name: mautic
+repo: mautic/mautic
+ref: 5.2.4              # last 5.x release before 6.0.0
+cutoff: 2025-03-25
+budget_days: 80
+live:
+  base_url: https://mautic.org        # UNVERIFIED page list
+  pages: [/, /download, /mautic-features]
+  pricing_url: null
+  competitor_pricing:
+    hubspot: https://www.hubspot.com/pricing/marketing
+    brevo: https://www.brevo.com/pricing/
+    mailchimp: https://mailchimp.com/pricing/marketing/
+forum:
+  kind: discourse
+  base_url: https://forum.mautic.org
+flows:
+  - name: evaluate_and_download
+    steps: [/, /mautic-features, /download]
+answer_key:
+  old_ref: 5.2.4
+  new_ref: 6.0.0
+  shipped_on: 2025-03-26
+  themes: []   # TODO(evaluator): fill BEFORE the first evaluation run, blind to outputs
+  sources:
+    - https://mautic.org/blog/mautic-6-0-orion-edition-is-released/

@@ -1,0 +1,29 @@
+# Plane: open-source project management (Next.js + Django).
+# Answer key: "Navigation 2.0" (changelog 1 Dec 2025), shipped in v1.2.0 (11 Dec 2025).
+name: plane
+repo: makeplane/plane
+ref: v1.1.0             # 23 Oct 2025, last release before Navigation 2.0
+cutoff: 2025-10-24
+budget_days: 70
+live:
+  base_url: https://plane.so          # UNVERIFIED page list
+  pages: [/, /pricing, /changelog]
+  pricing_url: https://plane.so/pricing
+  competitor_pricing:
+    linear: https://linear.app/pricing
+    jira: https://www.atlassian.com/software/jira/pricing
+    clickup: https://clickup.com/pricing
+forum:
+  kind: discourse
+  base_url: https://forum.plane.so
+flows:
+  - name: evaluate_pricing
+    steps: [/, /pricing]
+answer_key:
+  old_ref: v1.1.0
+  new_ref: v1.2.0
+  shipped_on: 2025-12-11
+  themes: []   # TODO(evaluator): fill BEFORE the first evaluation run, blind to outputs
+  sources:
+    - https://plane.so/changelog/2025-12-01-workspace-navigation-custom-forms-threads
+    - https://plane.so/blog/introducing-plane-navigation-2

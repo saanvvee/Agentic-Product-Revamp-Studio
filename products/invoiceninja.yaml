@@ -1,0 +1,23 @@
+# Invoice Ninja: invoicing (PHP/Laravel backend, React admin UI in a separate repo).
+# No clean dated answer key (Flutter -> React cut-over ~2024, date unconfirmed), so this
+# product is audited at its current release and scored on arbitration metrics only.
+name: invoiceninja
+repo: invoiceninja/invoiceninja
+extra_repos: [invoiceninja/ui]
+ref: v5.13.43           # latest at 29 Sep 2026
+cutoff: 2026-09-29
+budget_days: 60
+live:
+  base_url: https://invoiceninja.com  # UNVERIFIED page list
+  pages: [/, /pricing-plans/]
+  pricing_url: https://invoiceninja.com/pricing-plans/
+  competitor_pricing:
+    freshbooks: https://www.freshbooks.com/pricing
+    zoho_invoice: https://www.zoho.com/invoice/pricing.html
+    wave: https://www.waveapps.com/pricing
+forum:
+  kind: discourse
+  base_url: https://forum.invoiceninja.com
+flows:
+  - name: evaluate_pricing
+    steps: [/, /pricing-plans/]

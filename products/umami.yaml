@@ -1,0 +1,28 @@
+# Umami: privacy-focused web analytics. Demo product (PLAN D2).
+# Answer key: v2 -> v3 full UI redesign (v3.0.0, 7 Nov 2025).
+# URLs marked UNVERIFIED were not fetched (campus proxy blocks HTTPS from Python).
+name: umami
+repo: umami-software/umami
+ref: v2.19.0            # last v2 release before v3 (27 Jul 2025)
+cutoff: 2025-07-28      # Voice of Customer sees only issues/posts created before this
+budget_days: 60
+live:
+  base_url: https://umami.is          # UNVERIFIED page list
+  pages: [/, /pricing, /features, /docs]
+  pricing_url: https://umami.is/pricing
+  competitor_pricing:
+    plausible: https://plausible.io/#pricing
+    fathom: https://usefathom.com/pricing
+    simple_analytics: https://www.simpleanalytics.com/pricing
+local_base_url: http://localhost:3000   # docker compose in products/docker/umami (optional)
+flows:
+  - name: first_visit
+    steps: [/, /pricing, /docs]
+answer_key:
+  old_ref: v2.19.0
+  new_ref: v3.0.0
+  shipped_on: 2025-11-07
+  themes: []   # TODO(evaluator): fill BEFORE the first evaluation run, blind to outputs
+  sources:
+    - https://github.com/umami-software/umami/releases/tag/v3.0.0
+    - https://umami.is/blog/umami-v3
