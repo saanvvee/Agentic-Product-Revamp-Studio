@@ -80,21 +80,28 @@ and modify any part in the viva, so:
   before writing the call. Do not guess signatures.
 - Windows: never run two `pip install` against this venv at once (`WinError 5`).
 
-## Current status (29 Sep 2026)
+## Current status (30 Sep 2026)
 
-- **Built:** B0-B13 (`PLAN.md` Section 5). 47 offline tests pass (`pytest -q`).
-- **Verified live:** deterministic audit of umami (58 findings, no LLM); qwen3 structured call
-  (~95 s with think disabled); MCP server over stdio; Client over A2A on localhost.
-- **Blocked on the owner:**
-  1. `pip install -r requirements.txt` from a network without Sophos TLS inspection
-     (playwright, lizard), then `playwright install chromium`.
-  2. `.env`: GOOGLE_API_KEY (AI Studio, no billing), GITHUB_TOKEN, PSI_API_KEY.
-  3. Replace `products/constraints/umami.yaml` (demo, circular) and write answer-key themes,
-     both by a member who has not read the prompts, before any evaluation run.
+- **Built:** B0-B13 plus observability (`revamp/observe.py`, `revamp/tracing.py`) and the
+  Mission Control dashboard (`python -m revamp.dashboard`). 51 offline tests pass.
+- **Verified live (30 Sep):** all 7 MCP audit tools through a real MCP stdio client (umami:
+  123 findings); deterministic audit; Phoenix receiving OTLP spans; dashboard streaming a real
+  local-model run.
+- **Owner still to do:**
+  1. `.env`: GOOGLE_API_KEY (AI Studio, no billing), GITHUB_TOKEN, optional PSI_API_KEY.
+     Langfuse: Cloud Hobby keys (free), or self-host `deploy/langfuse` on a machine with RAM.
+  2. Replace `products/constraints/umami.yaml` (demo, circular), write constraints for the
+     other products and answer-key themes, by a member who has not read the prompts.
 - **Verified facts (do not re-derive):**
   - LiteLLM + Ollama qwen3 needs `reasoning_effort="none"` (think=false), else >600 s per call.
   - osv-scanner 2.6 `--recursive` walks the drive root on Windows; pass `-L <lockfile>`.
   - ADK: a node must not set `ctx.route` before yielding `RequestInput`, or resume fast-forwards.
   - ADK: two routed edges between the same node pair = "Duplicate edge"; use `DEFAULT_ROUTE`.
   - Discourse robots.txt disallows `/search`; use `/top.json`.
-  - Python httpx reaches the internet on campus; only PyPI is intercepted. `gh` and `npm` work.
+  - Campus network: only PyPI is TLS-intercepted. httpx, gh, git, npm work. Install Python
+    packages from GitHub source (`--no-build-isolation`); browser tooling comes from npm
+    (`browser_worker/`).
+  - MCP stdio children get a minimal environment and inherit the JSON-RPC stdin: pass
+    `env=os.environ` and use `stdin=DEVNULL` for subprocesses, or Lighthouse finds no Chrome.
+  - Self-hosted Langfuse (ClickHouse + Postgres + Redis + MinIO) does not fit next to Ollama
+    on this 15 GB laptop.

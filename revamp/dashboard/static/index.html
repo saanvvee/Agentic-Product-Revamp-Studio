@@ -66,7 +66,7 @@ main { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; pa
 #runs li .s { color: var(--mute); font-size: 12px; }
 .right { display: grid; gap: 12px; min-width: 0; }
 #graphcard { position: relative; }
-#cy { height: 470px; }
+#cy { height: 430px; }
 #legend { position: absolute; right: 10px; top: 44px; font-size: 12px; color: var(--mute); display: grid; gap: 3px; background: var(--panel); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); }
 #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 #now { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); min-height: 40px; align-items: center; }
@@ -217,9 +217,9 @@ function drawGraph(graph, arm) {
   cy = cytoscape({
     container: $("#cy"), elements: els, wheelSensitivity: 0.2, minZoom: 0.3, maxZoom: 2.5,
     style: [
-      { selector: "node.wf", style: { shape: "round-rectangle", width: 118, height: 34, label: "data(label)",
+      { selector: "node.wf", style: { shape: "round-rectangle", width: 104, height: 34, label: "data(label)",
         "background-color": v("--node"), "border-width": 2, "border-color": v("--line"), color: v("--fg"),
-        "font-size": 12, "text-valign": "center", "font-weight": 600 } },
+        "font-size": 13, "text-valign": "center", "font-weight": 600 } },
       { selector: "node.start", style: { shape: "ellipse", width: 58, height: 26, "font-size": 10, color: v("--mute") } },
       { selector: "node.worker", style: { shape: "round-rectangle", width: "label", height: 20, padding: 6,
         label: "data(label)", "font-size": 10, "background-color": v("--agent-soft"), color: v("--agent"),
@@ -241,17 +241,16 @@ function drawGraph(graph, arm) {
     ],
     layout: { name: "preset" },
   });
-  // Lay out the workflow graph first, then park each node's workers beside it.
+  // Lay out the workflow graph left to right, then stack each node's workers under it.
   cy.elements("node.wf, edge.flow").layout({
-    name: "dagre", rankDir: "TB", nodeSep: 40, rankSep: 42, edgeSep: 12, fit: false,
+    name: "dagre", rankDir: "LR", nodeSep: 90, rankSep: 34, edgeSep: 12, fit: false,
     stop: () => {
       cy.nodes("node.wf").forEach((n) => {
-        const ws = cy.nodes(`node.worker[owner = "${n.id()}"]`);
-        ws.forEach((w, i) => w.position({ x: n.position("x") + 140 + i * 0, y: n.position("y") + (i - (ws.length - 1) / 2) * 24 }));
-        // spread horizontally when several workers share a row height
-        ws.forEach((w, i) => w.position({ x: n.position("x") + 120 + (w.width() / 2) + (i % 2) * 0, y: w.position("y") }));
+        cy.nodes(`node.worker[owner = "${n.id()}"]`).forEach((w, i) => {
+          w.position({ x: n.position("x"), y: n.position("y") + 34 + i * 23 });
+        });
       });
-      cy.fit(undefined, 24);
+      cy.fit(undefined, 20);
     },
   }).run();
   $("#graphtitle").textContent = `Orchestration graph · ${arm || ""}`;
@@ -271,6 +270,7 @@ function apply(ev, live) {
   if (t === "run_started" || t === "audit_started") {
     S.info = ev;
     S.status = "running";
+    if (ev.product && [...$("#product").options].some((o) => o.value === ev.product)) $("#product").value = ev.product;
     if (ev.graph) drawGraph(ev.graph, `${ev.product} · ${ev.arm} · seed ${ev.seed}`);
     else drawAuditGraph(ev);
     setLink("#trace", ev.trace_url);
@@ -609,7 +609,7 @@ try { const t = localStorage.getItem("theme"); if (t) document.documentElement.d
 
 (async function init() {
   meta = await (await fetch("/api/meta")).json();
-  $("#product").innerHTML = meta.products.map((p) => `<option>${esc(p)}</option>`).join("");
+  $("#product").innerHTML = meta.products.map((p) => `<option ${p === "umami" ? "selected" : ""}>${esc(p)}</option>`).join("");
   $("#arm").innerHTML = meta.arms.map((a) => `<option value="${esc(a.name)}" ${a.name === "A2" ? "selected" : ""}>${esc(a.name)} · ${esc(a.description)}</option>`).join("");
   $("#mode").innerHTML = meta.modes.map((m) => `<option ${m === meta.default_mode ? "selected" : ""}>${esc(m)}</option>`).join("");
   await refreshRuns();

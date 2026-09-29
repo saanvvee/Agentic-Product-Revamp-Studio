@@ -35,7 +35,7 @@ Ten LLM agents and two deterministic solvers. The audits are MCP tools, not agen
 ```powershell
 py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-powershell -ExecutionPolicy Bypass -File scripts\fetch_binaries.ps1   # osv-scanner, scc, axe, Chromium
+powershell -ExecutionPolicy Bypass -File scripts\fetch_binaries.ps1   # osv-scanner, scc, browser worker + Chromium
 copy .env.example .env    # then fill in GOOGLE_API_KEY, GITHUB_TOKEN, PSI_API_KEY
 ollama pull qwen3:4b
 ```
@@ -53,10 +53,29 @@ public APIs. The campus network's TLS inspection blocks PyPI; install from anoth
 .venv\Scripts\python.exe -m revamp eval umami --arms A0,A1,A2 --seeds 0,1,2
 ```
 
+## Watch it run
+
+```powershell
+.venv\Scripts\python.exe -m revamp.dashboard            # Mission Control -> http://localhost:8700
+```
+
+Mission Control shows the workflow graph live: the active node, the agents working inside it,
+back-edges as they are taken, and every agent's prompt and answer. It also shows tool calls,
+proposals, the budget ledger and plan waves, the conflict register, the client negotiation, and
+the cost split. It can launch runs and audits, take the human-approval decision in the browser,
+and replay any past run without a model.
+[Walkthrough 05](docs/walkthrough/05-observability-dashboard.md) explains it.
+
+Traces (OpenTelemetry, one trace per run) go to either backend:
+- **Langfuse:** set `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. Langfuse
+  Cloud Hobby is free with no card. `deploy/langfuse` self-hosts it on a machine with RAM to
+  spare.
+- **Phoenix:** `python -m phoenix.server.main serve` and
+  `PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006`.
+
 Optional pieces:
 - Client as a separate process: `python -m revamp.client_service --port 8765`, plus
   `REVAMP_CLIENT_URL=http://localhost:8765`.
-- Tracing: `phoenix serve`, plus `PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006`.
 - One model family for every agent: `--mode local` or `--mode gemini`.
 
 ## Tests
