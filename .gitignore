@@ -1,22 +1,20 @@
-# --- Datasets: NEVER COMMIT (PRD S7.4, R17) ---
-# MVTec AD is CC BY-NC-SA and this repository is public.
-data/
-datasets/
-*.wav
-*.ckpt
-*.pt
-*.pth
-
 # --- Secrets ---
 .env
 .env.*
 !.env.example
 *.key
 
-# --- LLM response cache (PRD S7.8) ---
-# Gitignored wholesale; a small fixture subset is force-added deliberately.
+# --- Audited product material (third-party source, screenshots, reports) ---
+# Cloned repos and raw tool output belong to other projects; never commit them.
+workspace/
+runs/
+
+# --- LLM response cache ---
 cache/
 !cache/fixtures/
+
+# --- Downloaded binaries ---
+tools/bin/
 
 # --- Python ---
 .venv/
@@ -27,21 +25,20 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# --- Detector artefacts and run outputs ---
-# artifacts/ holds trained weights, calibration params, and -- critically --
-# anomalib writes DERIVED MVTec IMAGES here during test(). Those are derivatives
-# of CC BY-NC-SA data and must never reach a public repo.
-# This was a real near-miss on 14 Sep 2026: `git add -A` staged 115 of them.
+# --- Local databases ---
+*.db
+*.sqlite3
+
+# --- Observability ---
+.phoenix/
+
+# --- Leftovers from the archived project (branch obsolete/incident-response) ---
+data/
+datasets/
 artifacts/
 results/
 lightning_logs/
 outputs/
-*.db
-*.sqlite3
-decisions.jsonl
-
-# --- Observability ---
-.phoenix/
 
 # --- OS / editor ---
 .DS_Store

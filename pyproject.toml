@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "revamp-studio"
+version = "0.1.0"
+description = "Agentic Product Revamp Studio (CSE3101 Agentic AI)"
+requires-python = ">=3.11,<3.12"
+
+[tool.setuptools.packages.find]
+include = ["revamp*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "network: needs internet (skipped unless RUN_NETWORK_TESTS=1)",
+    "llm: calls a real LLM (skipped unless RUN_LLM_TESTS=1)",
+]

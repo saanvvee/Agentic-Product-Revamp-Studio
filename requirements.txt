@@ -1,0 +1,50 @@
+# Agentic Product Revamp Studio -- CSE3101 Agentic AI, BML Munjal University
+#
+# Interpreter: CPython 3.11.9 in .venv. Always call .venv/Scripts/python.exe.
+# Every dependency is pinned exactly. Never loosen a pin (CLAUDE.md).
+# Install: .venv/Scripts/python.exe -m pip install -r requirements.txt
+#
+# Network note (29 Sep 2026): the campus network's Sophos SSL inspection breaks
+# pip. Install from a different network or after trusting the campus CA.
+
+# --- Agent framework ---
+# google.adk.workflow graph API, verified 13 Sep 2026 (old branch) and 29 Sep.
+google-adk==2.9.0
+google-genai==2.23.0
+# Local model route: LiteLlm with the ollama_chat/ prefix.
+litellm==1.100.1
+
+# --- Protocols ---
+mcp==2.2.0
+a2a-sdk==1.1.2
+uvicorn==0.52.4
+starlette==1.6.0
+
+# --- Data and solvers ---
+pydantic==2.13.5
+numpy==2.4.6
+scipy==1.17.1
+PyYAML==6.0.3
+python-dotenv==1.2.3
+httpx==0.28.1
+
+# --- Audit tools (Python side) ---
+# Pins from the 29 Sep survey. NOT YET INSTALLED: blocked by the Sophos issue
+# above. Re-verify each version against PyPI when installing.
+playwright==1.63.0
+axe-playwright-python==0.1.8
+lizard==1.24.0
+
+# --- Observability ---
+arize-phoenix==20.11.0
+arize-phoenix-otel==0.17.1
+openinference-instrumentation-google-adk==0.1.27
+
+# --- Tests ---
+pytest==9.1.1
+pytest-asyncio==1.4.0
+
+# --- Non-Python tools (not pip) ---
+# Node 22.22 + `npx lighthouse@13.5.0`
+# osv-scanner v2.x and scc v4.1.0: Windows binaries into tools/bin/ via
+#   scripts/fetch_binaries.ps1
