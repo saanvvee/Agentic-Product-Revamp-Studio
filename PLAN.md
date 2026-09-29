@@ -54,6 +54,12 @@ Decided 29 Sep 2026 (Aakarsh).
 
 ---
 
+## 2a. Contract amendments
+
+| # | Date | Change | Why |
+|---|---|---|---|
+| 1 | 29 Sep 2026 | `Team` gains `"single_llm"` | Baseline A0's plan items need a proposal author that is not a team |
+
 ## 3. Architecture (modules and contracts)
 
 Each module has one owner and a frozen interface. Members code against the contracts in parallel.

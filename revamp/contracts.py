@@ -90,7 +90,9 @@ class Finding(_Frozen):
 
 # ----------------------------------------------------------------------------- proposals
 
-Team = Literal["design", "engineering", "product_pricing", "growth", "quality_risk"]
+# "single_llm": proposals produced by baseline arm A0 (amendment 1, 29 Sep 2026).
+Team = Literal["design", "engineering", "product_pricing", "growth", "quality_risk",
+               "single_llm"]
 Risk = Literal["low", "medium", "high"]
 
 
