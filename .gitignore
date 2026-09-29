@@ -32,14 +32,6 @@ __pycache__/
 # --- Observability ---
 .phoenix/
 
-# --- Leftovers from the archived project (branch obsolete/incident-response) ---
-data/
-datasets/
-artifacts/
-results/
-lightning_logs/
-outputs/
-
 # --- OS / editor ---
 .DS_Store
 Thumbs.db

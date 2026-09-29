@@ -1,7 +1,6 @@
 """Parser tests on small synthetic tool outputs. No network, no binaries."""
 
 from datetime import date, datetime, timezone
-from pathlib import Path
 
 import pytest
 
