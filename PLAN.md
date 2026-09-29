@@ -146,7 +146,7 @@ Each step ends runnable and tested. Tick when merged to `main`.
 - [x] **B3 Knowledge base (M2):** SQLite, namespaces, role-based access, provenance links, tests (team role cannot read `client_private`)
 - [~] **B4 Tool runners:** (PSI needs a key; axe/journeys need Playwright, blocked by campus TLS; rest verified live) PSI, Lighthouse local, axe, Playwright screenshots, osv-scanner, scc, lizard, GitHub issues, Discourse, SEO crawl. Each returns `Finding`s; each has a recorded-fixture test
 - [x] **B5 MCP server (M3):** `MCPServer` exposing runners and KB reads, caller role enforced
-- [x] **B6 Product configs:** `products/{umami,mautic,plane,invoiceninja}.yaml` (URLs, repo, forum, release cut-off, budget); optional docker compose for replay
+- [x] **B6 Product configs:** `products/{umami,mautic,plane,invoiceninja}.yaml` (URLs, repo, forum, release cut-off, budget). Local-replay Docker setup NOT built: set `local_base_url` by hand if you run one
 - [x] **B7 Arbitration solvers (M8):** budget ILP (`scipy.optimize.milp`), dependency toposort, provenance validator. Pure functions, unit-tested
 - [x] **B8 Agents:** Chief Diagnostician, Voice of Customer, Journey Auditor, Design, Engineering, Product & Pricing, Conflict Detector, Red Team, Engagement Lead, Client
 - [x] **B9 Orchestration (M9):** ADK `Workflow` graph with bounded back-edges; baselines A0 and A1 as separate entry points

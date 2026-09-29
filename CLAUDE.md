@@ -87,7 +87,7 @@ and modify any part in the viva, so:
   (~95 s with think disabled); MCP server over stdio; Client over A2A on localhost.
 - **Blocked on the owner:**
   1. `pip install -r requirements.txt` from a network without Sophos TLS inspection
-     (playwright, axe-playwright-python, lizard), then `playwright install chromium`.
+     (playwright, lizard), then `playwright install chromium`.
   2. `.env`: GOOGLE_API_KEY (AI Studio, no billing), GITHUB_TOKEN, PSI_API_KEY.
   3. Replace `products/constraints/umami.yaml` (demo, circular) and write answer-key themes,
      both by a member who has not read the prompts, before any evaluation run.

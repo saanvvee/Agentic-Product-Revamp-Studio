@@ -14,7 +14,7 @@ live:
     plausible: https://plausible.io/#pricing
     fathom: https://usefathom.com/pricing
     simple_analytics: https://www.simpleanalytics.com/pricing
-local_base_url: http://localhost:3000   # docker compose in products/docker/umami (optional)
+local_base_url: null    # set to e.g. http://localhost:3000 if you run umami v2.19.0 locally
 flows:
   - name: first_visit
     steps: [/, /pricing, /docs]

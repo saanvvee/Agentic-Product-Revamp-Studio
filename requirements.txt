@@ -32,7 +32,6 @@ httpx==0.28.1
 # Pins from the 29 Sep survey. NOT YET INSTALLED: blocked by the Sophos issue
 # above. Re-verify each version against PyPI when installing.
 playwright==1.63.0
-axe-playwright-python==0.1.8
 lizard==1.24.0
 
 # --- Observability ---
