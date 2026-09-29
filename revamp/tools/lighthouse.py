@@ -139,6 +139,22 @@ async def psi_audit(product: str, url: str, strategy: str = "mobile",
     return out
 
 
+def _chrome_env() -> dict[str, str]:
+    """chrome-launcher finds Chrome through PROGRAMFILES/LOCALAPPDATA, which an MCP
+    stdio child does not get by default. Point it at a browser explicitly."""
+    import os
+    from pathlib import Path
+    env = dict(os.environ)
+    if "CHROME_PATH" not in env:
+        for cand in (r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"):
+            if Path(cand).is_file():
+                env["CHROME_PATH"] = cand
+                break
+    return env
+
+
 async def _run_cli_once(url: str) -> dict[str, Any]:
     npx = shutil.which("npx")  # npx.cmd on Windows
     if npx is None:
@@ -148,10 +164,12 @@ async def _run_cli_once(url: str) -> dict[str, Any]:
         "--output=json", "--output-path=stdout", "--quiet",
         "--only-categories=performance,accessibility,seo,best-practices",
         "--chrome-flags=--headless=new",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        # DEVNULL: inside the MCP server, stdin is the JSON-RPC pipe; a child must not inherit it.
+        stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE, env=_chrome_env())
     out, err = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"lighthouse failed ({proc.returncode}): {err.decode()[-400:]}")
+        raise RuntimeError(f"lighthouse failed ({proc.returncode}): {err.decode(errors='replace')[:500]}")
     return json.loads(out)
 
 
@@ -177,3 +195,18 @@ async def local_lighthouse(product: str, url: str, target: str, runs: int = 5) -
         severity="info", metric="lh_perf_spread", value=round(spread, 1), unit="points",
         detail="Measurement noise. Differences smaller than this are not evidence."))
     return found
+
+
+async def performance_audit(product: str, base_url: str, pages: list[str],
+                            target: str) -> list[Finding]:
+    """Live pages: PSI if a key is set (Google runs Lighthouse, returns CrUX field
+    data too). Without a key, or for a local instance: the Lighthouse CLI on this
+    machine, median of 3 runs on the first 2 pages (about 100 s per run on this CPU)."""
+    out: list[Finding] = []
+    if target == "live" and settings.psi_api_key:
+        for path in pages[:3]:
+            out += await psi_audit(product, base_url.rstrip("/") + path)
+        return out
+    for path in pages[:2]:
+        out += await local_lighthouse(product, base_url.rstrip("/") + path, target, runs=3)
+    return out

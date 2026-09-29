@@ -43,12 +43,26 @@ def build_server(product: Product, kb: KnowledgeBase) -> MCPServer:
         return product.live.base_url
 
     def summarise(label: str, found: list[Finding]) -> str:
+        """Store findings and return a short summary the agent can reason over."""
         new = kb.add_findings(found)
         sev = Counter(f.severity for f in found)
         top = evidence.select(found, per_category=4)
         lines = [f"{label}: {len(found)} findings ({new} new). By severity: {dict(sev)}"]
         lines += [evidence.line(f) for f in top[:10]]
         return "\n".join(lines)
+
+    def audit_tool(fn):
+        """Register an audit tool whose failure comes back as a readable message, so
+        the agent can decide what to do next instead of seeing a bare error."""
+        import functools
+
+        @functools.wraps(fn)
+        async def wrapper(*a, **kw):
+            try:
+                return await fn(*a, **kw)
+            except Exception as e:
+                return f"{fn.__name__} FAILED: {type(e).__name__}: {str(e)[:300]}"
+        return server.tool()(wrapper)
 
     @server.tool()
     async def coverage() -> str:
@@ -74,19 +88,19 @@ def build_server(product: Product, kb: KnowledgeBase) -> MCPServer:
                 return f.model_dump_json(indent=1)
         return f"No finding {finding_id}"
 
-    @server.tool()
+    @audit_tool
     async def audit_seo(target: str = "live") -> str:
         """Cheap. Raw-HTML SEO checks on the configured pages, robots.txt, sitemap."""
         return summarise("seo", await seo.seo_audit(product.name, base(target),
                                                     product.live.pages, target))
 
-    @server.tool()
+    @audit_tool
     async def audit_pricing() -> str:
         """Cheap. Snapshot the product's pricing page and competitors' pricing pages."""
         return summarise("pricing", await pricing.pricing_snapshots(
             product.name, product.live.pricing_url, product.live.competitor_pricing))
 
-    @server.tool()
+    @audit_tool
     async def audit_user_voice() -> str:
         """Cheap. Top GitHub issues and forum topics created before the product cutoff."""
         found = await voice.github_issues(product.name, product.repo, product.cutoff)
@@ -95,7 +109,7 @@ def build_server(product: Product, kb: KnowledgeBase) -> MCPServer:
                                                   product.cutoff)
         return summarise("user_voice", found)
 
-    @server.tool()
+    @audit_tool
     async def audit_code() -> str:
         """Expensive (minutes). Clone the audited release; size, complexity, dependency CVEs."""
         found: list[Finding] = []
@@ -106,28 +120,22 @@ def build_server(product: Product, kb: KnowledgeBase) -> MCPServer:
             found += await code.code_audit(product.name, repo, ref, cutoff=product.cutoff)
         return summarise("code", found)
 
-    @server.tool()
+    @audit_tool
     async def audit_performance(target: str = "live") -> str:
-        """Expensive. Lighthouse via PageSpeed Insights for live pages (median of 5 local
-        runs when target='local')."""
-        found: list[Finding] = []
-        for path in product.live.pages[:3]:
-            url = base(target).rstrip("/") + path
-            if target == "local":
-                found += await lighthouse.local_lighthouse(product.name, url,
-                                                           f"local:{product.ref}")
-            else:
-                found += await lighthouse.psi_audit(product.name, url)
-        return summarise("performance", found)
+        """Expensive (minutes). Lighthouse: PageSpeed Insights if a key is configured,
+        otherwise the Lighthouse CLI here (median of 3 runs)."""
+        tgt = "live" if target == "live" else f"local:{product.ref}"
+        return summarise("performance", await lighthouse.performance_audit(
+            product.name, base(target), product.live.pages, tgt))
 
-    @server.tool()
+    @audit_tool
     async def audit_accessibility(target: str = "live") -> str:
         """Expensive. axe-core WCAG 2.2 AA scan of the configured pages in a real browser."""
         tgt = "live" if target == "live" else f"local:{product.ref}"
         return summarise("accessibility", await browser.axe_audit(
             product.name, base(target), product.live.pages, tgt))
 
-    @server.tool()
+    @audit_tool
     async def audit_journeys(target: str = "live") -> str:
         """Expensive. Walk each scripted user journey, screenshot every step."""
         tgt = "live" if target == "live" else f"local:{product.ref}"

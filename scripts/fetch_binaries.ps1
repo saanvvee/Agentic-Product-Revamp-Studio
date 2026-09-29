@@ -4,13 +4,11 @@
 # Pinned versions. Re-check the release pages before bumping:
 #   https://github.com/google/osv-scanner/releases
 #   https://github.com/boyter/scc/releases
-#   https://www.npmjs.com/package/axe-core
 # Needs a network without TLS interception, or the interceptor's CA trusted by Windows.
 
 $ErrorActionPreference = "Stop"
 $OsvVersion = "2.6.0"
 $SccVersion = "4.1.0"
-$AxeVersion = "4.13.0"
 
 $bin = Join-Path $PSScriptRoot "..\tools\bin"
 New-Item -ItemType Directory -Force $bin | Out-Null
@@ -25,11 +23,10 @@ Invoke-WebRequest -Uri "https://github.com/boyter/scc/releases/download/v$SccVer
 Expand-Archive -Force $zip -DestinationPath $bin
 Remove-Item $zip
 
-Write-Host "axe-core $AxeVersion"
-Invoke-WebRequest -Uri "https://cdn.jsdelivr.net/npm/axe-core@$AxeVersion/axe.min.js" `
-    -OutFile (Join-Path $bin "axe.min.js")
-
-Write-Host "Playwright Chromium"
-& (Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe") -m playwright install chromium
+Write-Host "browser worker: Playwright + axe-core (versions pinned in browser_worker/package.json)"
+Push-Location (Join-Path $PSScriptRoot "..\browser_worker")
+npm install --no-audit --no-fund
+npx playwright install chromium
+Pop-Location
 
 Get-ChildItem $bin

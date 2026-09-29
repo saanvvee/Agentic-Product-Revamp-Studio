@@ -10,26 +10,11 @@ from __future__ import annotations
 import httpx
 
 from revamp.contracts import Evidence, Finding
+from revamp.tools.browser import rendered_text
 from revamp.tools.common import Polite, artifacts_dir, evidence_timer, parse_html, safe_name
 
 MAX_CHARS = 12_000
 MIN_USEFUL_CHARS = 300  # below this the page is client-rendered; try a real browser
-
-
-async def rendered_text(url: str) -> str | None:
-    """Page text after JavaScript runs. None if Playwright is not installed."""
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        return None
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        try:
-            page = await browser.new_page()
-            await page.goto(url, wait_until="networkidle", timeout=60_000)
-            return await page.inner_text("body")
-        finally:
-            await browser.close()
 
 
 async def pricing_snapshots(product: str, own_url: str | None,

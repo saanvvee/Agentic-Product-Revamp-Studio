@@ -29,9 +29,8 @@ python-dotenv==1.2.3
 httpx==0.28.1
 
 # --- Audit tools (Python side) ---
-# Pins from the 29 Sep survey. NOT YET INSTALLED: blocked by the Sophos issue
-# above. Re-verify each version against PyPI when installing.
-playwright==1.63.0
+# On the campus network install from source instead of PyPI (TLS verified):
+#   pip install --no-build-isolation --no-deps "git+https://github.com/terryyin/lizard.git@1.24.0"
 lizard==1.24.0
 
 # --- Observability ---
@@ -44,6 +43,7 @@ pytest==9.1.1
 pytest-asyncio==1.4.0
 
 # --- Non-Python tools (not pip) ---
-# Node 22.22 + `npx lighthouse@13.5.0`
-# osv-scanner v2.x and scc v4.1.0: Windows binaries into tools/bin/ via
-#   scripts/fetch_binaries.ps1
+# Node 22.22: `npx lighthouse@13.5.0`, and browser_worker/ (Playwright 1.63.0 +
+#   axe-core 4.13.0 from npm, pinned in browser_worker/package.json).
+# osv-scanner 2.6.0 and scc 4.1.0: Windows binaries in tools/bin/.
+# All installed by scripts/fetch_binaries.ps1.

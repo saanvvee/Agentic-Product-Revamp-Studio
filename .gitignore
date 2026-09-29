@@ -13,8 +13,9 @@ runs/
 cache/
 !cache/fixtures/
 
-# --- Downloaded binaries ---
+# --- Downloaded binaries and Node packages ---
 tools/bin/
+node_modules/
 
 # --- Python ---
 .venv/

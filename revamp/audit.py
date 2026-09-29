@@ -18,7 +18,6 @@ from revamp.contracts import CostLedger, Finding
 from revamp.kb import KnowledgeBase
 from revamp.llm.cache import current_ledger
 from revamp.products import Product
-from revamp.settings import settings
 from revamp.tools import browser, code, lighthouse, pricing, seo, voice
 
 log = logging.getLogger(__name__)
@@ -43,16 +42,7 @@ async def _step(name: str, p: Product, target: str) -> list[Finding]:
     if name == "code":
         return await code.code_audit(p.name, p.repo, p.ref, cutoff=p.cutoff)
     if name == "performance":
-        out = []
-        for path in p.live.pages[:3]:
-            url = base.rstrip("/") + path
-            if target == "live":
-                if not settings.psi_api_key:
-                    raise RuntimeError("PSI_API_KEY not set (keyless PSI returns 429)")
-                out += await lighthouse.psi_audit(p.name, url)
-            else:
-                out += await lighthouse.local_lighthouse(p.name, url, tgt)
-        return out
+        return await lighthouse.performance_audit(p.name, base, p.live.pages, tgt)
     if name == "accessibility":
         return await browser.axe_audit(p.name, base, p.live.pages, tgt)
     if name == "journeys":

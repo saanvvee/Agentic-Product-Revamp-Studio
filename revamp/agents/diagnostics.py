@@ -12,6 +12,8 @@ trust a prompt to bound a loop).
 
 from __future__ import annotations
 
+import os
+
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
@@ -40,6 +42,9 @@ def mcp_toolset(product: str, role: str = "team") -> McpToolset:
                 command=str(settings.root / ".venv" / "Scripts" / "python.exe"),
                 args=["-m", "revamp.mcp_server", "--product", product, "--role", role],
                 cwd=str(settings.root),
+                # The MCP client passes only a minimal environment by default; our own
+                # server needs PATH, PROGRAMFILES etc. to find node, git and Chrome.
+                env=dict(os.environ),
             ),
             timeout=900.0,  # a code audit or 5-run Lighthouse can take minutes
         ),

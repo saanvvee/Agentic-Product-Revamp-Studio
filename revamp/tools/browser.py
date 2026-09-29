@@ -1,8 +1,10 @@
-"""Browser evidence with Playwright: axe-core accessibility scans and scripted journeys.
+"""Browser evidence: axe-core accessibility scans, scripted journeys, rendered page text.
 
-axe-core is injected from tools/bin/axe.min.js (scripts/fetch_binaries.ps1) rather
-than through a Python wrapper: one fewer dependency, and the exact axe version is
-visible in every Finding.
+The browser itself is driven by a small Node worker (browser_worker/worker.mjs) using
+Playwright for Node and axe-core from npm. Python's playwright package is a wrapper
+around that same Node driver, and it cannot be installed on the campus network
+(PyPI is TLS-intercepted) while npm works. So we call the driver directly: one JSON
+job on stdin, one JSON result on stdout.
 
 Journeys produce two kinds of output: Findings for measurable breakage (HTTP errors,
 console errors, failed requests, slow loads) and screenshots, which the Journey
@@ -11,7 +13,9 @@ Auditor agent looks at with a vision model. The screenshot is the second modalit
 
 from __future__ import annotations
 
-import time
+import asyncio
+import json
+import shutil
 
 from revamp.contracts import Evidence, Finding
 from revamp.settings import settings
@@ -19,14 +23,31 @@ from revamp.tools.common import artifacts_dir, evidence_timer, join, safe_name, 
 
 AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 IMPACT = {"minor": "low", "moderate": "medium", "serious": "high", "critical": "critical"}
-VIEWPORT = {"width": 1280, "height": 800}
+WORKER = settings.root / "browser_worker" / "worker.mjs"
 
 
-def _axe_js() -> str:
-    path = settings.tools_bin / "axe.min.js"
-    if not path.is_file():
-        raise FileNotFoundError("tools/bin/axe.min.js missing; run scripts/fetch_binaries.ps1")
-    return path.read_text(encoding="utf-8")
+class BrowserUnavailable(RuntimeError):
+    pass
+
+
+async def run_worker(job: dict, timeout: float = 600) -> object:
+    node = shutil.which("node")
+    if node is None:
+        raise BrowserUnavailable("node not found: install Node 22")
+    if not (WORKER.parent / "node_modules" / "playwright").is_dir():
+        raise BrowserUnavailable("run `npm install` and `npx playwright install chromium` "
+                                 "in browser_worker/ (scripts/fetch_binaries.ps1 does both)")
+    proc = await asyncio.create_subprocess_exec(
+        node, str(WORKER), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE, cwd=str(WORKER.parent))
+    out, err = await asyncio.wait_for(proc.communicate(json.dumps(job).encode()), timeout)
+    try:
+        data = json.loads(out)
+    except json.JSONDecodeError:
+        raise BrowserUnavailable(f"worker failed: {err.decode(errors='replace')[-400:]}")
+    if isinstance(data, dict) and "error" in data:
+        raise BrowserUnavailable(data["error"])
+    return data
 
 
 def parse_axe(result: dict, *, product: str, url: str, target: str,
@@ -49,92 +70,71 @@ def parse_axe(result: dict, *, product: str, url: str, target: str,
     return out
 
 
-async def _browser():
-    from playwright.async_api import async_playwright  # imported lazily: optional dep
-    pw = await async_playwright().start()
-    browser = await pw.chromium.launch(headless=True)
-    return pw, browser
-
-
 async def axe_audit(product: str, base_url: str, pages: list[str],
                     target: str = "live") -> list[Finding]:
-    js = _axe_js()
-    out: list[Finding] = []
+    urls = [join(base_url, p) for p in pages]
     with evidence_timer():
-        pw, browser = await _browser()
-        try:
-            ctx = await browser.new_context(viewport=VIEWPORT)
-            page = await ctx.new_page()
-            for path in pages:
-                url = join(base_url, path)
-                await page.goto(url, wait_until="load", timeout=60_000)
-                await page.add_script_tag(content=js)
-                result = await page.evaluate(
-                    "tags => axe.run(document, {runOnly: {type: 'tag', values: tags}})",
-                    AXE_TAGS)
-                art = save_json(artifacts_dir(product, "axe") / f"{safe_name(url)}.json", result)
-                out += parse_axe(result, product=product, url=url, target=target, artifact=art)
-        finally:
-            await browser.close()
-            await pw.stop()
+        results = await run_worker({"op": "axe", "urls": urls, "tags": AXE_TAGS})
+    out: list[Finding] = []
+    for r in results:
+        art = save_json(artifacts_dir(product, "axe") / f"{safe_name(r['url'])}.json",
+                        r["result"])
+        out += parse_axe(r["result"], product=product, url=r["url"], target=target,
+                         artifact=art)
     return out
+
+
+def journey_findings(product: str, flow_name: str, steps: list[dict],
+                     target: str) -> list[Finding]:
+    findings: list[Finding] = []
+    for i, s in enumerate(steps, 1):
+        url = s["url"]
+        ev = Evidence(tool="playwright_journey", target=target, locator=url,
+                      artifact_path=s.get("screenshot"))
+        step = f"step {i} of flow '{flow_name}'"
+        status = s.get("status", 0)
+        if status >= 400 or status == 0:
+            findings.append(Finding.make(
+                product=product, category="journey", severity="high", evidence=ev,
+                title=f"HTTP {status} at {step} ({url})", metric="http_status", value=status,
+                detail=s.get("error") or ""))
+        if s.get("consoleErrors"):
+            findings.append(Finding.make(
+                product=product, category="journey", severity="medium", evidence=ev,
+                title=f"{len(s['consoleErrors'])} console errors at {step} ({url})",
+                detail=" | ".join(s["consoleErrors"][:5])[:600],
+                metric="console_errors", value=len(s["consoleErrors"])))
+        if s.get("failedRequests"):
+            findings.append(Finding.make(
+                product=product, category="journey", severity="low", evidence=ev,
+                title=f"{len(s['failedRequests'])} failed requests at {step} ({url})",
+                detail=" | ".join(s["failedRequests"][:5])[:600], metric="failed_requests",
+                value=len(s["failedRequests"])))
+        load_ms = s.get("loadMs", 0)
+        findings.append(Finding.make(
+            product=product, category="journey", evidence=ev,
+            severity="medium" if load_ms > 5000 else "info",
+            title=f"Load {load_ms} ms at {step} ({url})",
+            metric="load_event_ms", value=load_ms, unit="ms",
+            detail="Wall-clock to the load event from this machine; noisy, lab only.",
+            tags=("screenshot",)))
+    return findings
 
 
 async def run_journey(product: str, base_url: str, flow_name: str, steps: list[str],
                       target: str = "live") -> tuple[list[Finding], list[str]]:
     """Returns (findings, screenshot paths). Screenshots go to the Journey Auditor."""
-    findings: list[Finding] = []
-    shots: list[str] = []
     shot_dir = artifacts_dir(product, f"journey/{flow_name}")
     with evidence_timer():
-        pw, browser = await _browser()
-        try:
-            ctx = await browser.new_context(viewport=VIEWPORT)
-            page = await ctx.new_page()
-            console_errors: list[str] = []
-            failed: list[str] = []
-            page.on("console", lambda m: console_errors.append(m.text)
-                    if m.type == "error" else None)
-            page.on("requestfailed", lambda r: failed.append(r.url))
-            for i, path in enumerate(steps, 1):
-                url = join(base_url, path)
-                console_errors.clear()
-                failed.clear()
-                t0 = time.perf_counter()
-                resp = await page.goto(url, wait_until="load", timeout=60_000)
-                load_ms = (time.perf_counter() - t0) * 1000
-                shot = shot_dir / f"{i:02d}_{safe_name(path)}.png"
-                await page.screenshot(path=str(shot), full_page=True)
-                shots.append(str(shot))
-                ev = Evidence(tool="playwright_journey", target=target, locator=url,
-                              artifact_path=str(shot))
-                step = f"step {i} of flow '{flow_name}'"
-                status = resp.status if resp else 0
-                if status >= 400 or status == 0:
-                    findings.append(Finding.make(
-                        product=product, category="journey", severity="high", evidence=ev,
-                        title=f"HTTP {status} at {step} ({url})", metric="http_status",
-                        value=status))
-                if console_errors:
-                    findings.append(Finding.make(
-                        product=product, category="journey", severity="medium", evidence=ev,
-                        title=f"{len(console_errors)} console errors at {step} ({url})",
-                        detail=" | ".join(console_errors[:5])[:600],
-                        metric="console_errors", value=len(console_errors)))
-                if failed:
-                    findings.append(Finding.make(
-                        product=product, category="journey", severity="low", evidence=ev,
-                        title=f"{len(failed)} failed requests at {step} ({url})",
-                        detail=" | ".join(failed[:5])[:600], metric="failed_requests",
-                        value=len(failed)))
-                findings.append(Finding.make(
-                    product=product, category="journey", evidence=ev,
-                    severity="medium" if load_ms > 5000 else "info",
-                    title=f"Load {load_ms:.0f} ms at {step} ({url})",
-                    metric="load_event_ms", value=round(load_ms), unit="ms",
-                    detail="Wall-clock to the load event from this machine; noisy, lab only.",
-                    tags=("screenshot",)))
-        finally:
-            await browser.close()
-            await pw.stop()
-    return findings, shots
+        results = await run_worker({"op": "journey", "shotDir": str(shot_dir),
+                                    "urls": [join(base_url, p) for p in steps]})
+    return (journey_findings(product, flow_name, results, target),
+            [r["screenshot"] for r in results])
+
+
+async def rendered_text(url: str) -> str | None:
+    """Page text after JavaScript runs; None if the browser worker is unavailable."""
+    try:
+        return (await run_worker({"op": "text", "url": url}, timeout=120))["text"]
+    except BrowserUnavailable:
+        return None

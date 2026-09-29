@@ -107,3 +107,18 @@ def test_voice_leak_guard():
     with pytest.raises(LeakageError):
         _assert_no_leak([f], date(2025, 7, 28))
     assert _assert_no_leak([f], date(2025, 8, 2)) == [f]
+
+
+def test_journey_findings():
+    from revamp.tools.browser import journey_findings
+    steps = [{"url": "https://x/", "status": 200, "loadMs": 6200, "consoleErrors": ["boom"],
+              "failedRequests": [], "screenshot": "s1.png"},
+             {"url": "https://x/p", "status": 404, "loadMs": 300, "consoleErrors": [],
+              "failedRequests": ["https://x/a.js"], "screenshot": "s2.png"}]
+    fs = journey_findings("p", "f", steps, "live")
+    by = {(f.metric, f.evidence.locator): f for f in fs}
+    assert by[("load_event_ms", "https://x/")].severity == "medium"
+    assert "screenshot" in by[("load_event_ms", "https://x/")].tags
+    assert by[("console_errors", "https://x/")].value == 1
+    assert by[("http_status", "https://x/p")].severity == "high"
+    assert by[("failed_requests", "https://x/p")].evidence.artifact_path == "s2.png"

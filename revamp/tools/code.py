@@ -27,7 +27,8 @@ LIZARD_LANGS = ("javascript", "typescript", "php", "ruby", "python", "go")
 
 async def _run(*cmd: str, cwd: Path | None = None, ok_codes=(0,)) -> str:
     proc = await asyncio.create_subprocess_exec(
-        *cmd, cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        *cmd, cwd=cwd, stdin=asyncio.subprocess.DEVNULL,  # never inherit the MCP stdio pipe
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     out, err = await proc.communicate()
     if proc.returncode not in ok_codes:
         raise RuntimeError(f"{Path(cmd[0]).name} exited {proc.returncode}: "

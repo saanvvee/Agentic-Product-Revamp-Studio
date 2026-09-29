@@ -1,0 +1,10 @@
+{
+  "name": "revamp-browser-worker",
+  "private": true,
+  "description": "Playwright + axe-core worker called by revamp/tools/browser.py (PyPI is unreachable on campus; npm works).",
+  "type": "module",
+  "dependencies": {
+    "axe-core": "4.13.0",
+    "playwright": "1.63.0"
+  }
+}
