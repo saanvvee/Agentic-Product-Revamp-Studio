@@ -37,6 +37,7 @@ class Settings:
     products_dir: Path
     tools_bin: Path
     kb_path: Path
+    client_url: str  # A2A Client service; empty = in-process client
 
 
 def load() -> Settings:
@@ -57,6 +58,7 @@ def load() -> Settings:
         products_dir=ROOT / "products",
         tools_bin=ROOT / "tools" / "bin",
         kb_path=ROOT / "runs" / "kb.sqlite3",
+        client_url=os.getenv("REVAMP_CLIENT_URL", ""),
     )
 
 

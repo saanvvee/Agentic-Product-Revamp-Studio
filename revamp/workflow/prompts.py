@@ -92,12 +92,6 @@ def red_team_prompt(product: Product, plan: Plan, props: dict[str, Proposal],
     return "\n".join(out)
 
 
-def client_prompt(decision: str, concerns: list[str]) -> str:
-    if decision == "accept":
-        return "You are ACCEPTING the plan."
-    return "You are REJECTING the plan. Your concerns:\n" + "\n".join(f"- {c}" for c in concerns)
-
-
 def adapt_prompt(product: Product, plan: Plan, props: dict[str, Proposal],
                  history: list[dict]) -> str:
     out = [_header(product, plan.budget_days), "", "Current plan:"]

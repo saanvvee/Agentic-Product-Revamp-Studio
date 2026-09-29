@@ -17,7 +17,6 @@ from google.adk.events.request_input import RequestInput
 from revamp.agents.runtime import ask
 from revamp.agents.schemas import (
     ClientAdaptation,
-    ClientReply,
     ConflictReport,
     EngagementBrief,
     HandoffReview,
@@ -27,11 +26,10 @@ from revamp.agents.schemas import (
     TeamProposals,
     VoiceReport,
 )
-from revamp.arbitration.constraints import check
+from revamp import client_service
 from revamp.arbitration.plan import build_plan, plan_without_arbitration
 from revamp.arbitration.sequencer import find_cycle
 from revamp.contracts import (
-    ClientVerdict,
     Conflict,
     Evidence,
     Finding,
@@ -42,21 +40,13 @@ from revamp.contracts import (
     utcnow,
 )
 from revamp.llm.registry import family_for
+from revamp.settings import settings
 from revamp.workflow import prompts
 from revamp.workflow import run_context as runs
 from revamp.workflow.arms import CLIENT_CAP, HANDOFF_CAP, RED_TEAM_CAP
 
 TEAMS = ("design", "engineering", "product_pricing")
 ABBR = {"design": "DE", "engineering": "EN", "product_pricing": "PP", "single_llm": "SL"}
-GENERIC_CONCERN = {
-    "budget": "The total cost is more than we can fund.",
-    "timeline": "This will take longer than we can wait.",
-    "brand": "Parts of this plan do not fit how we want the brand to be seen.",
-    "compliance": "Parts of this plan raise compliance concerns for us.",
-    "scope": "The plan misses something we consider essential.",
-    "risk": "Some items are riskier than we are willing to take on right now.",
-    "other": "Some items do not work for us.",
-}
 
 
 def _rc(ctx) -> runs.RunContext:
@@ -357,29 +347,25 @@ async def red_team(ctx):
 
 async def client(ctx):
     """The Client decides in code against its private constraints; the LLM only
-    words the reply. Only this node touches rc.client_kb (besides arm A6)."""
+    words the reply (revamp/client_service.py). With REVAMP_CLIENT_URL set, the
+    Client is a separate A2A process and this process never touches its data."""
     rc = _rc(ctx)
     plan: Plan = rc.current_plan
-    constraints = rc.client_kb.constraints(rc.product.name)
-    violations = check(plan, rc.proposals, constraints)
-    decision = "reject" if violations else "accept"
-    by_id = {c.id: c for c in constraints}
-    concerns = [by_id[v.constraint_id].public_hint or GENERIC_CONCERN[v.reason_code]
-                for v in violations]
-    reply = await ask(rc.crew.get("client"), prompts.client_prompt(decision, concerns),
-                      ClientReply)
-    vetoed = sorted({pid for v in violations for pid in v.proposal_ids})
-    verdict = ClientVerdict(plan_id=plan.id, decision=decision,
-                            reason_codes=tuple(sorted({v.reason_code for v in violations})),
-                            vetoed_proposal_ids=tuple(vetoed), message=reply.message)
-    rc.client_kb.add_verdict(rc.run_id, verdict)
-    rc.client_kb.log_private(rc.run_id, plan.id, {
-        "violations": [v.__dict__ for v in violations], "round": ctx.state["client_rounds"]})
+    round_no = ctx.state["client_rounds"]
+    if settings.client_url:
+        verdict = await client_service.remote_evaluate(
+            settings.client_url, plan, rc.proposals, rc.run_id, round_no, rc.seed)
+    else:
+        verdict = await client_service.evaluate(plan, rc.proposals, rc.run_id, round_no,
+                                                rc.client_kb, rc.crew.get("client"))
+    decision = verdict.decision
+    vetoed = list(verdict.vetoed_proposal_ids)
     ctx.state["client_rounds"] += 1
     rc.record.client_rounds = ctx.state["client_rounds"]
     ctx.state["client_history"] = ctx.state["client_history"] + [{
         "round": ctx.state["client_rounds"], "decision": decision,
-        "reason_codes": list(verdict.reason_codes), "vetoed": vetoed, "message": reply.message}]
+        "reason_codes": list(verdict.reason_codes), "vetoed": vetoed,
+        "message": verdict.message}]
     rc.note(f"client round {ctx.state['client_rounds']}: {decision} {list(verdict.reason_codes)}")
     if decision == "accept":
         ctx.route = "accept"
