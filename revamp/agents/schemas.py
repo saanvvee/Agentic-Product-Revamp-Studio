@@ -38,7 +38,7 @@ class VoiceTheme(BaseModel):
 
 
 class VoiceReport(BaseModel):
-    themes: list[VoiceTheme]
+    themes: list[VoiceTheme] = Field(max_length=6)
 
 
 class JourneyIssue(BaseModel):

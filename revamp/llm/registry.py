@@ -56,7 +56,9 @@ def _inner(family: str) -> BaseLlm:
     # reasoning_effort="none": LiteLLM maps it to Ollama's think=false. Without it
     # qwen3 "thinks" for many minutes on a CPU before answering (a single call hit
     # LiteLLM's 600 s timeout on 29 Sep; the same call with think=false took ~20 s).
-    return LiteLlm(model=settings.local_model, num_ctx=8192, reasoning_effort="none")
+    # timeout: a long structured answer on this CPU can pass LiteLLM's 600 s default.
+    return LiteLlm(model=settings.local_model, num_ctx=8192, reasoning_effort="none",
+                   timeout=1200)
 
 
 _SCRATCH: Path | None = None

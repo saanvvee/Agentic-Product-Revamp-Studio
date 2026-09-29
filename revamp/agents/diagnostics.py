@@ -18,6 +18,7 @@ from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
 
+from revamp import observe
 from revamp.agents.factory import make_agent
 from revamp.agents.schemas import DiagnosisReport
 from revamp.settings import settings
@@ -59,15 +60,29 @@ def tool_call_cap(max_calls: int):
     def cb(tool, args, tool_context):
         state["n"] += 1
         if state["n"] > max_calls:
+            observe.emit("tool_refused", tool=tool.name, agent="chief_diagnostician",
+                         call=state["n"], cap=max_calls)
             return {"error": f"tool budget exhausted ({max_calls} calls). Write your report now."}
+        observe.emit("tool_started", tool=tool.name, agent="chief_diagnostician",
+                     args=args, call=state["n"], cap=max_calls)
         return None
 
     cb.calls = state  # exposed for tests and the run record
     return cb
 
 
+def report_tool_result(tool, args, tool_context, tool_response):
+    """after_tool_callback: stream each MCP result to the dashboard; returning None
+    keeps the tool's response unchanged."""
+    text = str(tool_response)
+    observe.emit("tool_finished", tool=tool.name, agent="chief_diagnostician",
+                 result=text[:1500])
+    return None
+
+
 def chief_diagnostician(product: str, max_tool_calls: int = 8, **kw):
     agent = make_agent("chief_diagnostician", INSTRUCTION, DiagnosisReport,
                        tools=[mcp_toolset(product)], **kw)
     agent.before_tool_callback = tool_call_cap(max_tool_calls)
+    agent.after_tool_callback = report_tool_result
     return agent

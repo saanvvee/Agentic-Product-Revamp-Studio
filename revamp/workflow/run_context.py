@@ -73,7 +73,9 @@ class RunContext:
     log: list[str] = field(default_factory=list)  # human-readable trace for the report
 
     def note(self, msg: str) -> None:
+        from revamp import observe
         self.log.append(msg)
+        observe.emit("note", text=msg)
 
 
 _RUNS: dict[str, RunContext] = {}

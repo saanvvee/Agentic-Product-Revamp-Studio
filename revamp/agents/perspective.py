@@ -15,7 +15,7 @@ topics), each with an id and an engagement score. Group them into themes. For ea
 decide whether it is SIGNAL (a recurring product problem many users share) or NOISE
 (individual support requests, installation help for one environment, spam, off-topic).
 A single post with very high engagement can be signal on its own. Cite the finding ids of
-the posts in each theme. Return at most 8 themes, signal first.
+the posts in each theme. Return at most 6 themes, signal first.
 """
 
 JOURNEY = """

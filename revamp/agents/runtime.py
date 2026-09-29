@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 import uuid
 from typing import TypeVar
 
@@ -22,6 +23,8 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 from pydantic import BaseModel, ValidationError
+
+from revamp import observe
 
 log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
@@ -63,6 +66,10 @@ async def ask(agent: LlmAgent, prompt: str, schema: type[T],
     """`images`: (bytes, mime type) pairs, sent as inline parts (Journey Auditor)."""
     parts = [types.Part(text=prompt)] + [
         types.Part(inline_data=types.Blob(data=b, mime_type=m)) for b, m in images]
+    model = getattr(agent.model, "model", str(agent.model))
+    observe.emit("agent_started", agent=agent.name, model=model, prompt=prompt[:6000],
+                 images=len(images), schema=schema.__name__)
+    t0 = time.perf_counter()
     last_err = ""
     for attempt in range(2):
         if attempt:
@@ -73,12 +80,18 @@ async def ask(agent: LlmAgent, prompt: str, schema: type[T],
         candidate = structured if structured is not None else _extract_json(text)
         try:
             if isinstance(candidate, str):
-                return schema.model_validate_json(candidate)
-            return schema.model_validate(candidate)
+                out = schema.model_validate_json(candidate)
+            else:
+                out = schema.model_validate(candidate)
+            observe.emit("agent_finished", agent=agent.name, model=model,
+                         output=out.model_dump(mode="json"), attempts=attempt + 1,
+                         ms=round((time.perf_counter() - t0) * 1000))
+            return out
         except (ValidationError, ValueError) as e:
             last_err = str(e)
             log.warning("%s output invalid (attempt %d): %s", agent.name, attempt + 1,
                         last_err[:200])
+    observe.emit("agent_error", agent=agent.name, error=last_err[:500])
     raise AgentOutputError(f"{agent.name} failed schema {schema.__name__}: {last_err[:400]}")
 
 

@@ -27,10 +27,12 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from google.adk.models.base_llm import BaseLlm
+from opentelemetry import trace
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from pydantic import ConfigDict, PrivateAttr
 
+from revamp import observe
 from revamp.contracts import CostLedger
 
 CACHE_FORMAT_VERSION = "1"
@@ -118,7 +120,10 @@ class CachedLlm(BaseLlm):
         ledger = current_ledger.get()
 
         cached = self._load(path)
+        span = trace.get_current_span()  # ADK's model-call span, when tracing is on
+        span.set_attribute("revamp.cache_hit", cached is not None)
         if cached is not None:
+            observe.emit("llm_call", model=self.model, cached=True, seconds=0)
             self._hits += 1
             if ledger:
                 ledger.llm_calls += 1
@@ -147,6 +152,10 @@ class CachedLlm(BaseLlm):
                     ledger.prompt_tokens += u.prompt_token_count or 0
                     ledger.completion_tokens += u.candidates_token_count or 0
 
+        usage = [r.usage_metadata for r in responses if r.usage_metadata]
+        observe.emit("llm_call", model=self.model, cached=False, seconds=round(elapsed, 1),
+                     prompt_tokens=sum(u.prompt_token_count or 0 for u in usage),
+                     completion_tokens=sum(u.candidates_token_count or 0 for u in usage))
         if not any(r.error_code for r in responses):  # never cache a failure
             self._store(path, responses)
         for r in responses:

@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revamp Mission Control</title>
+<script src="/static/vendor/cytoscape.min.js"></script>
+<script src="/static/vendor/dagre.min.js"></script>
+<script src="/static/vendor/cytoscape-dagre.js"></script>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --fg: #1b2230; --mute: #667085; --line: #e3e6ec;
+  --acc: #2f5bd3; --acc-soft: #e5ecfc; --ok: #1f7a4a; --ok-soft: #e3f4ea;
+  --bad: #c0362c; --bad-soft: #fbe7e5; --warn: #9a6400; --warn-soft: #fbf0db;
+  --agent: #7a4fd3; --agent-soft: #efe8fc; --det: #5c6b7a; --node: #ffffff;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1218; --panel: #171b23; --fg: #e5e8ee; --mute: #98a2b3; --line: #2a303b;
+    --acc: #7ea2ff; --acc-soft: #1d2740; --ok: #5cc98d; --ok-soft: #16291f;
+    --bad: #ff8176; --bad-soft: #35191a; --warn: #f0b64e; --warn-soft: #33270f;
+    --agent: #b597ff; --agent-soft: #261d3b; --det: #9aa6b4; --node: #1d222c;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1218; --panel: #171b23; --fg: #e5e8ee; --mute: #98a2b3; --line: #2a303b;
+  --acc: #7ea2ff; --acc-soft: #1d2740; --ok: #5cc98d; --ok-soft: #16291f;
+  --bad: #ff8176; --bad-soft: #35191a; --warn: #f0b64e; --warn-soft: #33270f;
+  --agent: #b597ff; --agent-soft: #261d3b; --det: #9aa6b4; --node: #1d222c; --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 16px;
+         background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; white-space: nowrap; }
+header h1 span { color: var(--mute); font-weight: 500; }
+.ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, input[type=number], button { font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+input[type=number] { width: 64px; }
+button { cursor: pointer; }
+button.primary { background: var(--acc); color: #fff; border-color: var(--acc); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+label.chk { display: flex; gap: 4px; align-items: center; color: var(--mute); }
+.pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; background: var(--line); color: var(--mute); white-space: nowrap; }
+.pill.running { background: var(--acc-soft); color: var(--acc); }
+.pill.done { background: var(--ok-soft); color: var(--ok); }
+.pill.failed { background: var(--bad-soft); color: var(--bad); }
+.pill.paused { background: var(--warn-soft); color: var(--warn); }
+.spacer { flex: 1; }
+a { color: var(--acc); }
+main { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; padding: 12px 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--mute); margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+#runs { max-height: calc(100vh - 90px); overflow: auto; }
+#runs ul { list-style: none; margin: 0; padding: 6px; }
+#runs li { padding: 7px 8px; border-radius: 6px; cursor: pointer; display: grid; gap: 2px; }
+#runs li:hover { background: var(--acc-soft); }
+#runs li.sel { background: var(--acc-soft); outline: 1px solid var(--acc); }
+#runs li .t { font-weight: 600; }
+#runs li .s { color: var(--mute); font-size: 12px; }
+.right { display: grid; gap: 12px; min-width: 0; }
+#graphcard { position: relative; }
+#cy { height: 470px; }
+#legend { position: absolute; right: 10px; top: 44px; font-size: 12px; color: var(--mute); display: grid; gap: 3px; background: var(--panel); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); }
+#legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+#now { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); min-height: 40px; align-items: center; }
+.chip { padding: 2px 8px; border-radius: 6px; font-size: 12px; border: 1px solid var(--line); }
+.chip.agent { background: var(--agent-soft); color: var(--agent); border-color: transparent; }
+.chip.node { background: var(--acc-soft); color: var(--acc); border-color: transparent; }
+.chip.tool { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; padding: 10px 12px; }
+.stat { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.stat b { display: block; font-size: 18px; }
+.stat span { color: var(--mute); font-size: 12px; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--mute); padding: 8px 10px; white-space: nowrap; }
+.tabs button.on { color: var(--fg); border-bottom-color: var(--acc); }
+.tabs button .n { font-size: 11px; background: var(--line); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+.pane { display: none; padding: 10px 12px; max-height: 520px; overflow: auto; }
+.pane.on { display: block; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--mute); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+.tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--line); margin: 1px 2px 1px 0; }
+.sev-critical, .sev-high { color: var(--bad); } .sev-medium { color: var(--warn); } .sev-low, .sev-info { color: var(--mute); }
+.ev { display: grid; grid-template-columns: 62px 128px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.ev .ts { color: var(--mute); font-family: var(--mono); font-size: 12px; }
+.ev .ty { font-family: var(--mono); font-size: 12px; }
+.ty.agent { color: var(--agent); } .ty.node { color: var(--acc); } .ty.tool { color: var(--warn); }
+.ty.err { color: var(--bad); } .ty.ok { color: var(--ok); }
+details { border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: var(--bg); }
+details > summary { cursor: pointer; padding: 7px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+details pre { margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; font: 12px/1.45 var(--mono); max-height: 360px; overflow: auto; }
+.bar { height: 16px; background: var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+.bar span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--acc); }
+.bar.over span { background: var(--bad); }
+.wave { margin: 8px 0; }
+.wave h4 { margin: 0 0 4px; font-size: 12px; color: var(--mute); }
+.item { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-left: 3px solid var(--acc); background: var(--bg); border-radius: 4px; margin: 3px 0; }
+.item .c { margin-left: auto; color: var(--mute); white-space: nowrap; font-size: 12px; }
+.muted { color: var(--mute); }
+.empty { color: var(--mute); padding: 20px; text-align: center; }
+.verdict { padding: 8px 10px; border-radius: 8px; margin: 6px 0; }
+.verdict.accept { background: var(--ok-soft); } .verdict.reject { background: var(--bad-soft); }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg); max-width: 560px; width: calc(100% - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog label { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Revamp Studio <span>· Mission Control</span></h1>
+  <div class="ctl">
+    <select id="product" aria-label="Product"></select>
+    <select id="arm" aria-label="Arm"></select>
+    <input id="seed" type="number" value="0" min="0" aria-label="Seed">
+    <select id="mode" aria-label="Model routing"></select>
+    <label class="chk"><input id="hitl" type="checkbox"> human approval</label>
+    <button id="go" class="primary">Run engagement</button>
+    <button id="audit">Run audit</button>
+  </div>
+  <div class="spacer"></div>
+  <span id="status" class="pill">idle</span>
+  <a id="trace" target="_blank" rel="noopener" hidden>trace ↗</a>
+  <a id="report" target="_blank" rel="noopener" hidden>report ↗</a>
+  <button id="replay" title="Replay the selected run step by step">Replay</button>
+  <button id="theme" title="Toggle theme">◐</button>
+</header>
+
+<main>
+  <section class="card" id="runs">
+    <h2>Runs</h2>
+    <ul id="runlist"><li class="muted">loading…</li></ul>
+  </section>
+
+  <div class="right">
+    <section class="card" id="graphcard">
+      <h2 id="graphtitle">Orchestration graph</h2>
+      <div id="cy"></div>
+      <div id="legend">
+        <div><i style="background:var(--acc)"></i>workflow node</div>
+        <div><i style="background:var(--agent)"></i>LLM agent</div>
+        <div><i style="background:var(--det)"></i>deterministic / human</div>
+        <div><i style="background:var(--bad)"></i>back-edge taken</div>
+      </div>
+      <div id="now"><span class="muted">Nothing running. Pick a run on the left, or start one.</span></div>
+    </section>
+
+    <section class="card">
+      <div class="stats" id="stats"></div>
+      <div class="tabs" id="tabs"></div>
+      <div id="panes"></div>
+    </section>
+  </div>
+</main>
+
+<dialog id="approval">
+  <h3 style="margin-top:0">Human approval needed</h3>
+  <p class="muted">These plan items are high impact (high risk, or at least 25% of the budget). Tick the ones to <b>reject</b>.</p>
+  <div id="approvalItems"></div>
+  <div class="row"><button id="approveAll" class="primary">Submit</button></div>
+</dialog>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtJSON = (x) => esc(JSON.stringify(x, null, 2));
+const BACK = new Set(["revise", "replan", "reject", "propose"]);
+// LlmAgent names that differ from the worker ids drawn in the graph.
+const ALIAS = { "engagement_lead@adapt": "engagement_adapter", "engineering@handoff": "handoff_reviewer",
+                "single_llm_baseline@single_llm": "single_llm" };
+
+const TABS = [
+  ["timeline", "Timeline"], ["agents", "Agents"], ["tools", "Tools"], ["proposals", "Proposals"],
+  ["plan", "Plan & budget"], ["client", "Client"], ["evidence", "Evidence"], ["cost", "Cost"],
+];
+let cy = null, meta = null, selected = null, S = null, replayTimer = null;
+
+// ------------------------------------------------------------------ state per run
+function fresh(runId) {
+  return { runId, events: [], t0: null, graph: null, activeNode: null, lastDone: null,
+           visits: {}, edgeCount: {}, agents: [], openAgents: {}, tools: [], proposals: [],
+           plan: null, titles: {}, teams: {}, conflicts: [], verdicts: [], adaptations: [],
+           handoffs: [], redteam: [], llm: { calls: 0, cached: 0, seconds: 0, ptok: 0, ctok: 0 },
+           status: "running", info: {}, pendingApproval: null, finished: null };
+}
+
+// ------------------------------------------------------------------ graph
+function drawGraph(graph, arm) {
+  const els = [];
+  for (const n of graph.nodes) {
+    els.push({ data: { id: n.id, label: n.id }, classes: n.id === "START" ? "wf start" : "wf" });
+    for (const w of n.workers) {
+      const det = graph.deterministic.includes(w);
+      els.push({ data: { id: `${n.id}/${w}`, label: w.replaceAll("_", " "), owner: n.id },
+                 classes: det ? "worker det" : "worker" });
+      els.push({ data: { id: `${n.id}~${w}`, source: n.id, target: `${n.id}/${w}` }, classes: "link" });
+    }
+  }
+  for (const e of graph.edges) {
+    const back = e.route && BACK.has(e.route);
+    els.push({ data: { id: `${e.source}->${e.target}`, source: e.source, target: e.target,
+                       label: e.route && e.route !== "default" ? e.route : "" },
+               classes: back ? "flow back" : "flow" });
+  }
+  const css = getComputedStyle(document.documentElement);
+  const v = (n) => css.getPropertyValue(n).trim();
+  if (cy) cy.destroy();
+  cy = cytoscape({
+    container: $("#cy"), elements: els, wheelSensitivity: 0.2, minZoom: 0.3, maxZoom: 2.5,
+    style: [
+      { selector: "node.wf", style: { shape: "round-rectangle", width: 118, height: 34, label: "data(label)",
+        "background-color": v("--node"), "border-width": 2, "border-color": v("--line"), color: v("--fg"),
+        "font-size": 12, "text-valign": "center", "font-weight": 600 } },
+      { selector: "node.start", style: { shape: "ellipse", width: 58, height: 26, "font-size": 10, color: v("--mute") } },
+      { selector: "node.worker", style: { shape: "round-rectangle", width: "label", height: 20, padding: 6,
+        label: "data(label)", "font-size": 10, "background-color": v("--agent-soft"), color: v("--agent"),
+        "border-width": 1, "border-color": v("--agent"), "text-valign": "center", opacity: .55 } },
+      { selector: "node.worker.det", style: { "background-color": v("--bg"), color: v("--det"), "border-color": v("--det"), "border-style": "dashed" } },
+      { selector: "edge.link", style: { width: 1, "line-color": v("--line"), "line-style": "dotted", "curve-style": "straight" } },
+      { selector: "edge.flow", style: { width: 1.6, "line-color": v("--line"), "target-arrow-color": v("--line"),
+        "target-arrow-shape": "triangle", "curve-style": "bezier", label: "data(label)", "font-size": 10,
+        color: v("--mute"), "text-background-color": v("--panel"), "text-background-opacity": 1, "text-background-padding": 2 } },
+      { selector: "edge.flow.back", style: { "line-style": "dashed" } },
+      { selector: "node.wf.visited", style: { "border-color": v("--ok"), "background-color": v("--ok-soft") } },
+      { selector: "node.wf.active", style: { "border-color": v("--acc"), "border-width": 4, "background-color": v("--acc-soft") } },
+      { selector: "node.wf.error", style: { "border-color": v("--bad"), "background-color": v("--bad-soft") } },
+      { selector: "node.worker.working", style: { opacity: 1, "border-width": 3 } },
+      { selector: "node.worker.done", style: { opacity: 1 } },
+      { selector: "node.worker.error", style: { "border-color": v("--bad"), color: v("--bad"), opacity: 1 } },
+      { selector: "edge.flow.taken", style: { "line-color": v("--acc"), "target-arrow-color": v("--acc"), width: 2.6, color: v("--acc") } },
+      { selector: "edge.flow.back.taken", style: { "line-color": v("--bad"), "target-arrow-color": v("--bad"), color: v("--bad") } },
+    ],
+    layout: { name: "preset" },
+  });
+  // Lay out the workflow graph first, then park each node's workers beside it.
+  cy.elements("node.wf, edge.flow").layout({
+    name: "dagre", rankDir: "TB", nodeSep: 40, rankSep: 42, edgeSep: 12, fit: false,
+    stop: () => {
+      cy.nodes("node.wf").forEach((n) => {
+        const ws = cy.nodes(`node.worker[owner = "${n.id()}"]`);
+        ws.forEach((w, i) => w.position({ x: n.position("x") + 140 + i * 0, y: n.position("y") + (i - (ws.length - 1) / 2) * 24 }));
+        // spread horizontally when several workers share a row height
+        ws.forEach((w, i) => w.position({ x: n.position("x") + 120 + (w.width() / 2) + (i % 2) * 0, y: w.position("y") }));
+      });
+      cy.fit(undefined, 24);
+    },
+  }).run();
+  $("#graphtitle").textContent = `Orchestration graph · ${arm || ""}`;
+}
+
+function workerFor(node, agent) {
+  const alias = ALIAS[`${agent}@${node}`] || agent;
+  return cy && cy.getElementById(`${node}/${alias}`);
+}
+
+// ------------------------------------------------------------------ event reducer
+function apply(ev, live) {
+  if (!S || ev.run_id !== S.runId) return;
+  S.events.push(ev);
+  S.t0 = S.t0 ?? ev.ts;
+  const t = ev.type;
+  if (t === "run_started" || t === "audit_started") {
+    S.info = ev;
+    S.status = "running";
+    if (ev.graph) drawGraph(ev.graph, `${ev.product} · ${ev.arm} · seed ${ev.seed}`);
+    else drawAuditGraph(ev);
+    setLink("#trace", ev.trace_url);
+  } else if (t === "node_started") {
+    const prev = S.lastDone;
+    if (prev && cy) {
+      const edge = cy.getElementById(`${prev.node}->${ev.node}`);
+      if (edge.nonempty()) {
+        S.edgeCount[edge.id()] = (S.edgeCount[edge.id()] || 0) + 1;
+        edge.addClass("taken");
+        const base = edge.data("label").split(" ×")[0];
+        const n = S.edgeCount[edge.id()];
+        edge.data("label", n > 1 ? `${base} ×${n}` : base);
+      }
+    }
+    S.activeNode = ev.node;
+    S.visits[ev.node] = (S.visits[ev.node] || 0) + 1;
+    if (cy) {
+      cy.nodes("node.wf").removeClass("active");
+      const n = cy.getElementById(ev.node);
+      n.addClass("active");
+      n.data("label", S.visits[ev.node] > 1 ? `${ev.node} ×${S.visits[ev.node]}` : ev.node);
+      if (ev.node === "allocate") cy.nodes(`node.worker[owner = "allocate"]`).addClass("working");
+    }
+  } else if (t === "node_finished") {
+    S.lastDone = { node: ev.node, route: ev.route };
+    if (cy) {
+      cy.getElementById(ev.node).removeClass("active").addClass("visited");
+      if (ev.node === "allocate") cy.nodes(`node.worker[owner = "allocate"]`).removeClass("working").addClass("done");
+    }
+  } else if (t === "node_error") {
+    if (cy) cy.getElementById(ev.node).removeClass("active").addClass("error");
+  } else if (t === "agent_started") {
+    const rec = { ...ev, node: S.activeNode, status: "running" };
+    S.agents.push(rec);
+    S.openAgents[ev.agent] = rec;
+    const w = workerFor(S.activeNode, ev.agent);
+    if (w && w.nonempty()) w.removeClass("done error").addClass("working");
+  } else if (t === "agent_finished" || t === "agent_error") {
+    const rec = S.openAgents[ev.agent];
+    if (rec) { Object.assign(rec, { output: ev.output, error: ev.error, ms: ev.ms, attempts: ev.attempts,
+                                    status: t === "agent_error" ? "error" : "done" }); delete S.openAgents[ev.agent]; }
+    const w = workerFor(rec ? rec.node : S.activeNode, ev.agent);
+    if (w && w.nonempty()) w.removeClass("working").addClass(t === "agent_error" ? "error" : "done");
+  } else if (t === "llm_call") {
+    S.llm.calls++; if (ev.cached) S.llm.cached++;
+    S.llm.seconds += ev.seconds || 0; S.llm.ptok += ev.prompt_tokens || 0; S.llm.ctok += ev.completion_tokens || 0;
+  } else if (t === "tool_started") {
+    S.tools.push({ ...ev, status: "running" });
+    if (cy) { const n = cy.getElementById(`tool:${ev.tool}`); if (n.nonempty()) n.addClass("active"); }
+  } else if (t === "tool_finished" || t === "tool_refused") {
+    const open = [...S.tools].reverse().find((x) => x.tool === ev.tool && x.status === "running");
+    if (open) Object.assign(open, { result: ev.result, ms: ev.ms, status: t === "tool_refused" ? "refused" : "done" });
+    else S.tools.push({ ...ev, status: t === "tool_refused" ? "refused" : "done" });
+    if (cy) { const n = cy.getElementById(`tool:${ev.tool}`); if (n.nonempty()) n.removeClass("active").addClass("visited"); }
+  } else if (t === "proposals") { S.proposals = ev.proposals;
+  } else if (t === "plan") { S.plan = ev.plan; Object.assign(S.titles, ev.titles); Object.assign(S.teams, ev.teams);
+  } else if (t === "conflicts") { S.conflicts = ev.conflicts;
+  } else if (t === "handoff_review") { S.handoffs.push(ev);
+  } else if (t === "red_team_review") { S.redteam.push(ev);
+  } else if (t === "client_verdict") { S.verdicts.push(ev);
+  } else if (t === "adaptation") { S.adaptations.push(ev);
+  } else if (t === "approval_requested") {
+    S.pendingApproval = ev;
+    if (cy) cy.nodes(`node.worker[owner = "approve"]`).addClass("working");
+    if (live) openApproval(ev);
+  } else if (t === "approval_resolved") {
+    S.pendingApproval = null;
+    if (cy) cy.nodes(`node.worker[owner = "approve"]`).removeClass("working").addClass("done");
+  } else if (t === "run_finished" || t === "audit_finished") {
+    S.status = ev.status === "failed" ? "failed" : "done";
+    S.finished = ev;
+    if (cy) cy.nodes().removeClass("active working");
+    if (t === "run_finished") setLink("#report", `/api/runs/${S.runId}/report`);
+    refreshRuns();
+  } else if (t === "run_error") { S.status = "failed"; }
+  if (live) render();
+}
+
+function drawAuditGraph(ev) {
+  const steps = ev.steps || ["seo", "pricing", "voice", "code", "performance", "accessibility", "journeys"];
+  const g = { nodes: [{ id: "START", workers: [] }, { id: ev.agentic ? "chief_diagnostician" : "audit", workers: [] }],
+              edges: [{ source: "START", target: ev.agentic ? "chief_diagnostician" : "audit", route: null }],
+              deterministic: [] };
+  drawGraph(g, `${ev.product} · ${ev.agentic ? "agentic" : "deterministic"} audit`);
+  const hub = ev.agentic ? "chief_diagnostician" : "audit";
+  const names = ev.agentic ? ["audit_seo", "audit_pricing", "audit_user_voice", "audit_code", "audit_performance",
+                               "audit_accessibility", "audit_journeys", "coverage", "list_findings"] : steps;
+  const hubPos = cy.getElementById(hub).position();
+  names.forEach((s, i) => {
+    cy.add({ data: { id: `tool:${s}`, label: s }, classes: "worker det",
+             position: { x: hubPos.x - (names.length - 1) * 55 + i * 110, y: hubPos.y + 110 } });
+    cy.add({ data: { id: `${hub}=>${s}`, source: hub, target: `tool:${s}` }, classes: "link" });
+  });
+  cy.fit(undefined, 24);
+}
+
+function setLink(sel, url) { const a = $(sel); if (url) { a.href = url; a.hidden = false; } else a.hidden = true; }
+
+// ------------------------------------------------------------------ rendering
+function rel(ts) { return S.t0 ? `+${(ts - S.t0).toFixed(1)}s` : ""; }
+
+function render() {
+  if (!S) return;
+  const st = $("#status");
+  const paused = S.pendingApproval && S.status === "running";
+  st.textContent = paused ? "waiting for approval" : S.status;
+  st.className = `pill ${paused ? "paused" : S.status}`;
+  // now strip
+  const now = [];
+  if (S.status === "running") {
+    if (S.activeNode) now.push(`<span class="chip node">node · ${esc(S.activeNode)}</span>`);
+    for (const a of Object.keys(S.openAgents)) now.push(`<span class="chip agent">agent · ${esc(a)}</span>`);
+    for (const t of S.tools.filter((x) => x.status === "running")) now.push(`<span class="chip tool">tool · ${esc(t.tool)}</span>`);
+  }
+  $("#now").innerHTML = now.join("") || `<span class="muted">${S.status === "running" ? "working…" : `Run ${esc(S.status)}.`}</span>`;
+  renderStats();
+  renderTabs();
+}
+
+function renderStats() {
+  const f = S.finished?.cost;
+  const plan = S.plan;
+  const items = [
+    ["Events", S.events.length],
+    ["Agent calls", S.agents.length],
+    ["LLM calls (cached)", `${f ? f.llm_calls : S.llm.calls} (${f ? f.llm_cache_hits : S.llm.cached})`],
+    ["LLM time", `${Math.round(f ? f.llm_seconds : S.llm.seconds)} s`],
+    ["Evidence time", f ? `${Math.round(f.evidence_seconds)} s` : "—"],
+    ["Plan", plan ? `${plan.items.length} items · ${plan.total_cost}/${plan.budget_days} d` : "—"],
+    ["Client", S.verdicts.length ? S.verdicts.at(-1).decision + ` (round ${S.verdicts.length})` : "—"],
+  ];
+  $("#stats").innerHTML = items.map(([k, v]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
+}
+
+let tab = "timeline";
+function renderTabs() {
+  const counts = { timeline: S.events.length, agents: S.agents.length, tools: S.tools.length,
+                   proposals: S.proposals.length, client: S.verdicts.length };
+  $("#tabs").innerHTML = TABS.map(([id, name]) =>
+    `<button data-tab="${id}" class="${tab === id ? "on" : ""}">${name}${counts[id] ? `<span class="n">${counts[id]}</span>` : ""}</button>`).join("");
+  const pane = { timeline: paneTimeline, agents: paneAgents, tools: paneTools, proposals: paneProposals,
+                 plan: panePlan, client: paneClient, evidence: paneEvidence, cost: paneCost }[tab];
+  const el = $("#panes");
+  const keepScroll = el.firstElementChild ? el.firstElementChild.scrollTop : 0;
+  const openIds = [...el.querySelectorAll("details[open]")].map((d) => d.dataset.k);
+  el.innerHTML = `<div class="pane on">${pane()}</div>`;
+  for (const k of openIds) { const d = el.querySelector(`details[data-k="${CSS.escape(k)}"]`); if (d) d.open = true; }
+  el.firstElementChild.scrollTop = tab === "timeline" && S.status === "running" ? 1e9 : keepScroll;
+}
+
+function evLine(ev) {
+  const t = ev.type;
+  const cls = t.startsWith("agent") ? "agent" : t.startsWith("node") ? "node" : t.startsWith("tool") ? "tool"
+            : /error|failed/.test(t) ? "err" : /verdict|finished/.test(t) ? "ok" : "";
+  let txt = "";
+  if (t === "node_started") txt = `▶ ${ev.node}`;
+  else if (t === "node_finished") txt = `■ ${ev.node}${ev.route ? ` → route “${ev.route}”` : ""} · ${ev.ms} ms`;
+  else if (t === "agent_started") txt = `${ev.agent} (${ev.model}) · ${ev.schema}${ev.images ? ` · ${ev.images} images` : ""}`;
+  else if (t === "agent_finished") txt = `${ev.agent} answered · ${(ev.ms / 1000).toFixed(1)} s${ev.attempts > 1 ? " · retried" : ""}`;
+  else if (t === "agent_error") txt = `${ev.agent}: ${ev.error}`;
+  else if (t === "llm_call") txt = `${ev.model} · ${ev.cached ? "cache hit" : `${ev.seconds} s, ${ev.prompt_tokens || 0}+${ev.completion_tokens || 0} tok`}`;
+  else if (t === "tool_started") txt = `${ev.agent} → ${ev.tool}${ev.call ? ` (call ${ev.call}/${ev.cap})` : ""}`;
+  else if (t === "tool_finished") txt = `${ev.tool}: ${String(ev.result || "").split("\n")[0]}`;
+  else if (t === "tool_refused") txt = `${ev.tool} refused: tool budget ${ev.cap} reached`;
+  else if (t === "note") txt = ev.text;
+  else if (t === "client_verdict") txt = `client ${ev.decision} ${ev.reason_codes.join(", ")}${ev.remote ? " (A2A)" : ""}`;
+  else if (t === "plan") txt = `plan: ${ev.plan.items.length} items, ${ev.plan.total_cost}/${ev.plan.budget_days} d`;
+  else if (t === "run_started") txt = `run started: ${ev.product} ${ev.arm} seed ${ev.seed} · ${ev.mode}`;
+  else if (t === "run_finished") txt = `run ${ev.status}`;
+  else if (t === "approval_requested") txt = `waiting for human approval of ${ev.items.length} items`;
+  else if (t === "approval_resolved") txt = `human rejected: ${ev.rejected.join(", ") || "nothing"}`;
+  else txt = Object.entries(ev).filter(([k]) => !["v", "seq", "ts", "run_id", "type"].includes(k))
+             .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v).slice(0, 80) : v}`).join(" ").slice(0, 200);
+  return `<div class="ev"><span class="ts">${rel(ev.ts)}</span><span class="ty ${cls}">${esc(t)}</span><span>${esc(txt)}</span></div>`;
+}
+function paneTimeline() {
+  const shown = S.events.filter((e) => e.type !== "llm_call" || !e.cached);
+  return shown.length ? shown.map(evLine).join("") : `<div class="empty">No events yet.</div>`;
+}
+function paneAgents() {
+  if (!S.agents.length) return `<div class="empty">No agent calls yet.</div>`;
+  return S.agents.map((a, i) => `<details data-k="a${i}"><summary>
+      <b style="color:var(--agent)">${esc(a.agent)}</b><span class="tag">${esc(a.node || "")}</span>
+      <span class="muted">${esc(a.model)}</span>
+      <span class="${a.status === "error" ? "sev-high" : a.status === "running" ? "muted" : ""}">${a.status === "running" ? "working…" : a.status === "error" ? "failed" : `${(a.ms / 1000).toFixed(1)} s`}</span>
+    </summary><pre><b>PROMPT</b>\n${esc(a.prompt)}</pre>
+    ${a.output ? `<pre><b>OUTPUT</b>\n${fmtJSON(a.output)}</pre>` : ""}${a.error ? `<pre class="sev-high">${esc(a.error)}</pre>` : ""}</details>`).join("");
+}
+function paneTools() {
+  if (!S.tools.length) return `<div class="empty">No tool calls in this run. Tools run during audits (deterministic or Chief Diagnostician over MCP).</div>`;
+  return S.tools.map((t, i) => `<details data-k="t${i}"><summary><b style="color:var(--warn)">${esc(t.tool)}</b>
+      <span class="tag">${esc(t.agent)}</span><span class="muted">${t.status}${t.ms ? ` · ${(t.ms / 1000).toFixed(1)} s` : ""}</span></summary>
+      ${t.args ? `<pre><b>ARGS</b>\n${fmtJSON(t.args)}</pre>` : ""}<pre>${esc(t.result || "")}</pre></details>`).join("");
+}
+function planStatus(id) {
+  if (!S.plan) return "";
+  if (S.plan.items.some((i) => i.proposal_id === id)) return `<span style="color:var(--ok)">planned</span>`;
+  const r = S.plan.rejected.find((x) => x.proposal_id === id);
+  return r ? `<span class="sev-medium">${esc(r.reason)}</span>` : "";
+}
+function paneProposals() {
+  if (!S.proposals.length) return `<div class="empty">No proposals yet.</div>`;
+  return `<table><tr><th>Id</th><th>Team</th><th>Proposal</th><th>Days</th><th>Value</th><th>Areas</th><th>Status</th></tr>${
+    S.proposals.map((p) => `<tr><td><code>${esc(p.id)}</code>${p.revision ? ` r${p.revision}` : ""}</td><td>${esc(p.team)}</td>
+      <td><b>${esc(p.title)}</b><br><span class="muted">${esc(p.change)}</span><br>${p.finding_ids.map((f) => `<span class="tag">${esc(f)}</span>`).join("")}</td>
+      <td>${p.cost_days}</td><td>${p.value}</td><td>${p.areas.map((a) => `<span class="tag">${esc(a)}</span>`).join("")}</td>
+      <td>${planStatus(p.id)}</td></tr>`).join("")}</table>`;
+}
+function panePlan() {
+  const p = S.plan;
+  if (!p) return `<div class="empty">No plan yet.</div>`;
+  const share = p.budget_days ? p.total_cost / p.budget_days : 0;
+  const waves = {};
+  for (const it of p.items) (waves[it.order] ??= []).push(it);
+  const conflicts = (S.conflicts.length ? S.conflicts : p.conflicts || []);
+  return `<p><b>Budget ledger</b> · ${p.total_cost} of ${p.budget_days} engineer-days · value ${p.total_value}</p>
+    <div class="bar ${share > 1 ? "over" : ""}"><span style="width:${Math.min(100, share * 100)}%"></span></div>
+    <h3>Sequenced plan</h3>${Object.entries(waves).map(([w, its]) => `<div class="wave"><h4>Wave ${w}</h4>${
+      its.map((i) => `<div class="item"><code>${esc(i.proposal_id)}</code> ${esc(S.titles[i.proposal_id] || "")}
+        <span class="tag">${esc(S.teams[i.proposal_id] || "")}</span>${i.after.length ? `<span class="muted">after ${esc(i.after.join(", "))}</span>` : ""}
+        <span class="c">${i.cost_days} d · value ${i.value}</span></div>`).join("")}</div>`).join("") || `<p class="muted">Empty plan.</p>`}
+    <h3>Not in the plan</h3>${p.rejected.length ? `<table><tr><th>Proposal</th><th>Reason</th><th>Detail</th></tr>${
+      p.rejected.map((r) => `<tr><td><code>${esc(r.proposal_id)}</code> ${esc(S.titles[r.proposal_id] || "")}</td><td class="sev-medium">${esc(r.reason)}</td><td>${esc(r.detail)}</td></tr>`).join("")}</table>` : `<p class="muted">Nothing rejected.</p>`}
+    <h3>Conflict register</h3>${conflicts.length ? `<table><tr><th>Pair</th><th>Kind</th><th>Exclusive</th><th>Why</th></tr>${
+      conflicts.map((c) => `<tr><td><code>${esc(c.a)}</code> × <code>${esc(c.b)}</code></td><td>${esc(c.kind)}</td><td>${c.exclusive ? "yes" : "no"}</td><td>${esc(c.explanation)}</td></tr>`).join("")}</table>` : `<p class="muted">No conflicts detected${S.info.arm && ["A1", "A3", "A0"].includes(S.info.arm) ? " (detection is off in this arm)" : ""}.</p>`}
+    ${S.handoffs.filter((h) => h.rejected.length).map((h) => `<p><b>Handoff rejections</b> (round ${h.round}): ${h.rejected.map((r) => `<code>${esc(r.id)}</code> ${esc(r.reason)}`).join("; ")}</p>`).join("")}
+    ${S.redteam.filter((r) => r.blocks.length || r.flags.length).map((r) => `<p><b>Red team</b>: blocked ${r.blocks.map((b) => `<code>${esc(b.proposal_id)}</code> (${esc(b.issue)})`).join(", ") || "none"}; flagged ${r.flags.length}</p>`).join("")}`;
+}
+function paneClient() {
+  if (!S.verdicts.length) return `<div class="empty">The client has not seen a plan yet.</div>`;
+  const out = [];
+  S.verdicts.forEach((v, i) => {
+    out.push(`<div class="verdict ${v.decision}"><b>Round ${v.round}: ${esc(v.decision)}</b>${v.remote ? ` <span class="tag">via A2A</span>` : ""}
+      ${v.reason_codes.map((r) => `<span class="tag">${esc(r)}</span>`).join("")}
+      ${v.vetoed_proposal_ids.length ? `<div class="muted">vetoed: ${esc(v.vetoed_proposal_ids.join(", "))}</div>` : ""}
+      <div>“${esc(v.message)}”</div></div>`);
+    const a = S.adaptations[i];
+    if (a) out.push(`<div class="verdict" style="background:var(--acc-soft)"><b>Engagement Lead adapts</b>
+      <div>${esc(a.reasoning)}</div><div class="muted">drop ${esc((a.drop || []).join(", ") || "—")} · budget ${a.effective_budget_days} d${a.request ? ` · asks ${esc(a.team)} for “${esc(a.request)}”` : ""}</div></div>`);
+  });
+  return `<p class="muted">The team sees only reason codes and the message. The private constraints never leave the client.</p>${out.join("")}`;
+}
+let evidenceCache = {};
+function paneEvidence() {
+  const product = S.info.product;
+  if (!product) return `<div class="empty">No product.</div>`;
+  const d = evidenceCache[product];
+  if (!d) { fetch(`/api/findings/${product}`).then((r) => r.json()).then((j) => { evidenceCache[product] = j; if (tab === "evidence") renderTabs(); }); return `<div class="empty">loading…</div>`; }
+  const cov = Object.entries(d.coverage).map(([c, s]) => `<span class="tag">${esc(c)}: ${Object.entries(s).map(([k, v]) => `${k} ${v}`).join(", ")}</span>`).join(" ");
+  return `<p>${d.findings.length} findings in the knowledge base for <b>${esc(product)}</b></p><p>${cov}</p>
+    <table><tr><th>Id</th><th>Category</th><th>Finding</th><th>Tool</th></tr>${d.findings.slice(0, 300).map((f) =>
+    `<tr><td><code>${esc(f.id)}</code></td><td>${esc(f.category)}<br><span class="sev-${f.severity}">${esc(f.severity)}</span></td>
+      <td>${esc(f.title)}${f.value != null ? ` <span class="muted">[${esc(f.metric)}=${esc(f.value)}${f.unit ? " " + esc(f.unit) : ""}]</span>` : ""}</td>
+      <td>${esc(f.tool)}</td></tr>`).join("")}</table>`;
+}
+function paneCost() {
+  const f = S.finished?.cost;
+  const llmS = f ? f.llm_seconds : S.llm.seconds, evS = f ? f.evidence_seconds : 0;
+  const tot = Math.max(1, llmS + evS);
+  return `<p class="muted">Evidence cost (tool runs) and orchestration cost (LLM) are reported separately.</p>
+    <p><b>Orchestration (LLM)</b> ${Math.round(llmS)} s · ${f ? f.llm_calls : S.llm.calls} calls (${f ? f.llm_cache_hits : S.llm.cached} cached) · ${f ? f.prompt_tokens : S.llm.ptok} prompt + ${f ? f.completion_tokens : S.llm.ctok} completion tokens</p>
+    <div class="bar"><span style="width:${(llmS / tot) * 100}%;background:var(--agent)"></span></div>
+    <p><b>Evidence (tools)</b> ${Math.round(evS)} s <span class="muted">(evidence is gathered by the audit, before the engagement)</span></p>
+    <div class="bar"><span style="width:${(evS / tot) * 100}%;background:var(--warn)"></span></div>
+    ${S.finished?.stats ? `<h3>Provenance</h3><pre>${fmtJSON(S.finished.stats)}</pre>` : ""}
+    <h3>Per agent</h3><table><tr><th>Agent</th><th>Calls</th><th>Time</th></tr>${Object.entries(S.agents.reduce((m, a) => {
+      (m[a.agent] ??= { n: 0, ms: 0 }); m[a.agent].n++; m[a.agent].ms += a.ms || 0; return m; }, {})).map(([k, v]) =>
+      `<tr><td>${esc(k)}</td><td>${v.n}</td><td>${(v.ms / 1000).toFixed(1)} s</td></tr>`).join("")}</table>`;
+}
+
+// ------------------------------------------------------------------ runs, live, replay
+async function refreshRuns() {
+  const runs = await (await fetch("/api/runs")).json();
+  $("#runlist").innerHTML = runs.length ? runs.map((r) => `<li data-id="${esc(r.run_id)}" class="${selected === r.run_id ? "sel" : ""}">
+      <span class="t">${esc(r.kind === "audit" ? `audit · ${r.product}` : `${r.product} · ${r.arm} · s${r.seed}`)}</span>
+      <span class="s">${new Date(r.started * 1000).toLocaleString()} · <span class="pill ${esc(r.status)}">${esc(r.status)}</span></span></li>`).join("")
+    : `<li class="muted">No runs yet.</li>`;
+}
+async function select(runId, animate = false) {
+  clearInterval(replayTimer);
+  selected = runId;
+  S = fresh(runId);
+  $("#trace").hidden = $("#report").hidden = true;
+  const events = await (await fetch(`/api/runs/${runId}/events`)).json();
+  if (!animate) { for (const ev of events) apply(ev, false); render(); refreshRuns(); return; }
+  let i = 0;
+  replayTimer = setInterval(() => {
+    if (i >= events.length) { clearInterval(replayTimer); return; }
+    apply(events[i++], true);
+  }, 180);
+  refreshRuns();
+}
+function connect() {
+  const es = new EventSource("/api/stream");
+  es.onmessage = (m) => {
+    const ev = JSON.parse(m.data);
+    if (ev.type === "run_started" || ev.type === "audit_started") {
+      if (!S || S.status !== "running" || S.runId !== ev.run_id) { selected = ev.run_id; S = fresh(ev.run_id); }
+      refreshRuns();
+    }
+    apply(ev, true);
+  };
+}
+function openApproval(ev) {
+  $("#approvalItems").innerHTML = ev.items.map((it) => `<label><input type="checkbox" value="${esc(it.id)}">
+    <span><code>${esc(it.id)}</code> ${esc(it.title)} <span class="muted">${it.cost_days} d · risk ${esc(it.risk)}</span></span></label>`).join("");
+  $("#approval").showModal();
+}
+$("#approveAll").onclick = async () => {
+  const rejected = [...document.querySelectorAll("#approvalItems input:checked")].map((x) => x.value);
+  await fetch(`/api/runs/${S.runId}/approval`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rejected }) });
+  $("#approval").close();
+};
+
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) alert(j.error || "failed");
+  return j;
+}
+$("#go").onclick = () => post("/api/runs", { product: $("#product").value, arm: $("#arm").value,
+  seed: +$("#seed").value, mode: $("#mode").value, hitl: $("#hitl").checked });
+$("#audit").onclick = () => post("/api/audit", { product: $("#product").value });
+$("#replay").onclick = () => selected && select(selected, true);
+$("#runlist").onclick = (e) => { const li = e.target.closest("li[data-id]"); if (li) select(li.dataset.id); };
+$("#tabs").onclick = (e) => { const b = e.target.closest("button[data-tab]"); if (b) { tab = b.dataset.tab; renderTabs(); } };
+$("#theme").onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("theme", root.dataset.theme); } catch {}
+  if (S && S.info.graph) { const saved = S; select(saved.runId); }
+};
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+
+(async function init() {
+  meta = await (await fetch("/api/meta")).json();
+  $("#product").innerHTML = meta.products.map((p) => `<option>${esc(p)}</option>`).join("");
+  $("#arm").innerHTML = meta.arms.map((a) => `<option value="${esc(a.name)}" ${a.name === "A2" ? "selected" : ""}>${esc(a.name)} · ${esc(a.description)}</option>`).join("");
+  $("#mode").innerHTML = meta.modes.map((m) => `<option ${m === meta.default_mode ? "selected" : ""}>${esc(m)}</option>`).join("");
+  await refreshRuns();
+  connect();
+  const first = document.querySelector("#runlist li[data-id]");
+  if (meta.active_run) select(meta.active_run); else if (first) select(first.dataset.id);
+})();
+</script>
+</body>
+</html>

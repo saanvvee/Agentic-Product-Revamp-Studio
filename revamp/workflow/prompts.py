@@ -29,8 +29,10 @@ def brief_prompt(product: Product, findings: list[Finding], budget: float) -> st
 
 def voice_prompt(product: Product, findings: list[Finding]) -> str:
     voice = [f for f in findings if f.category == "user_voice"]
-    lines = [f"{f.id} | engagement {f.value or 0:g} | {f.title} :: {f.detail[:200]}" for f in
-             sorted(voice, key=lambda f: -(f.value or 0))[:40]]
+    # 25 posts x ~40 tokens keeps the prompt near 1.5k tokens: a 4B model on a CPU
+    # timed out (600 s) on 40 posts with 200-char excerpts (30 Sep 2026).
+    lines = [f"{f.id} | engagement {f.value or 0:g} | {f.title} :: {f.detail[:120]}" for f in
+             sorted(voice, key=lambda f: -(f.value or 0))[:25]]
     return f"{_header(product)}\n\nUser posts:\n" + ("\n".join(lines) or "(none)")
 
 

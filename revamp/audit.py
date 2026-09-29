@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import time
 
+from revamp import observe
 from revamp.contracts import CostLedger, Finding
 from revamp.kb import KnowledgeBase
 from revamp.llm.cache import current_ledger
@@ -54,22 +55,39 @@ async def _step(name: str, p: Product, target: str) -> list[Finding]:
     raise KeyError(name)
 
 
+def audit_run_id(product: str) -> str:
+    return f"audit-{product}-{time.strftime('%Y%m%d-%H%M%S')}"
+
+
 async def deterministic_audit(p: Product, kb: KnowledgeBase, target: str = "live",
-                              steps: tuple[str, ...] = STEPS) -> dict:
+                              steps: tuple[str, ...] = STEPS,
+                              run_id: str | None = None) -> dict:
     ledger = CostLedger()
     token = current_ledger.set(ledger)
+    run_token = observe.current_run.set(run_id or audit_run_id(p.name))
     report: dict[str, str] = {}
+    observe.emit("audit_started", product=p.name, target=target, steps=list(steps))
     try:
         for name in steps:
             t0 = time.perf_counter()
-            try:
-                found = await _step(name, p, target)
-                new = kb.add_findings(found)
-                report[name] = f"{len(found)} findings ({new} new) in {time.perf_counter() - t0:.0f}s"
-            except Exception as e:  # one failing tool must not sink the audit
-                report[name] = f"SKIPPED: {type(e).__name__}: {str(e)[:160]}"
-                log.warning("audit step %s failed: %s", name, e)
+            observe.emit("tool_started", tool=name, agent="deterministic")
+            with observe.span(f"tool.{name}", "TOOL", input={"product": p.name,
+                                                             "target": target}) as s:
+                try:
+                    found = await _step(name, p, target)
+                    new = kb.add_findings(found)
+                    report[name] = (f"{len(found)} findings ({new} new) in "
+                                    f"{time.perf_counter() - t0:.0f}s")
+                except Exception as e:  # one failing tool must not sink the audit
+                    report[name] = f"SKIPPED: {type(e).__name__}: {str(e)[:160]}"
+                    log.warning("audit step %s failed: %s", name, e)
+                observe.set_output(s, report[name])
+            observe.emit("tool_finished", tool=name, agent="deterministic",
+                         result=report[name], ms=round((time.perf_counter() - t0) * 1000))
     finally:
+        observe.emit("audit_finished", report=report,
+                     evidence_seconds=round(ledger.evidence_seconds))
+        observe.current_run.reset(run_token)
         current_ledger.reset(token)
     report["evidence_seconds"] = f"{ledger.evidence_seconds:.0f}"
     return report
@@ -84,11 +102,15 @@ async def agentic_audit(p: Product, max_tool_calls: int = 8, seed: int = 0,
 
     ledger = CostLedger()
     token = current_ledger.set(ledger)
+    run_token = observe.current_run.set(audit_run_id(p.name))
+    observe.emit("audit_started", product=p.name, target="live", agentic=True,
+                 max_tool_calls=max_tool_calls)
     try:
         agent = chief_diagnostician(p.name, max_tool_calls=max_tool_calls, seed=seed, mode=mode)
         out = await ask(agent, f"Audit the product {p.name} ({p.live.base_url}, "
                                f"github.com/{p.repo} at {p.ref}).", DiagnosisReport)
     finally:
+        observe.current_run.reset(run_token)
         current_ledger.reset(token)
     return {"report": out.model_dump(), "tool_calls": agent.before_tool_callback.calls["n"],
             "llm_calls": ledger.llm_calls, "llm_seconds": round(ledger.llm_seconds)}

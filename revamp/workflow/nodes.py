@@ -26,7 +26,7 @@ from revamp.agents.schemas import (
     TeamProposals,
     VoiceReport,
 )
-from revamp import client_service
+from revamp import client_service, observe
 from revamp.arbitration.plan import build_plan, plan_without_arbitration
 from revamp.arbitration.sequencer import find_cycle
 from revamp.contracts import (
@@ -175,6 +175,9 @@ async def perspectives(ctx):
     themes, journey_ids = await asyncio.gather(_voice(rc), _journey(rc))
     ctx.state["voice_themes"] = themes
     ctx.state["journey_ids"] = journey_ids
+    observe.emit("perspectives", themes=themes, journey_issues=[
+        {"id": f.id, "title": f.title, "severity": f.severity}
+        for f in _findings(rc) if f.id in set(journey_ids)])
     rc.note(f"perspectives: {sum(t['is_signal'] for t in themes)} signal themes, "
             f"{len(journey_ids)} journey issues")
     return {"themes": len(themes), "journey_issues": len(journey_ids)}
@@ -210,6 +213,8 @@ async def propose(ctx):
     ctx.state["feedback"] = feedback
     ctx.state["teams_to_run"] = list(TEAMS)
     ctx.state["propose_rounds"] = rounds
+    observe.emit("proposals", teams=teams, proposals=[
+        p.model_dump(mode="json") for p in rc.proposals.values()])
     rc.note(f"propose: {', '.join(f'{t}={len(r)}' for t, r in zip(teams, results))}")
     return {"proposals": len(rc.proposals)}
 
@@ -229,6 +234,9 @@ async def handoff(ctx):
     rejects = [d for d in out.decisions
                if d.decision == "reject" and d.proposal_id in {p.id for p in todo}]
     rc.record.handoff_rejections += len(rejects)
+    observe.emit("handoff_review", reviewed=[p.id for p in todo], rejected=[
+        {"id": d.proposal_id, "reason": d.reason, "realistic_cost_days": d.realistic_cost_days}
+        for d in rejects], round=ctx.state["handoff_rounds"])
     if not rejects:
         return {"rejected": 0}
 
@@ -277,6 +285,7 @@ async def conflicts(ctx):
                                   exclusive=c.exclusive).model_dump())
     ctx.state["conflicts"] = found
     ctx.state["conflict_sig"] = sig
+    observe.emit("conflicts", conflicts=found)
     rc.note(f"conflicts: {len(found)} ({sum(c['exclusive'] for c in found)} exclusive)")
     return {"conflicts": len(found)}
 
@@ -308,6 +317,8 @@ async def allocate(ctx):
     rc.team_kb.add_plan(rc.run_id, plan)
     rc.current_plan = plan
     ctx.state["plan_id"] = plan.id
+    observe.emit("plan", plan=plan.model_dump(mode="json"), arbitrated=rc.arm.arbitration,
+                 titles={p.id: p.title for p in props}, teams={p.id: p.team for p in props})
     rc.note(f"allocate: {len(plan.items)} items, {plan.total_cost:g}/{plan.budget_days:g}d, "
             f"value {plan.total_value}, {len(plan.rejected)} rejected")
     return {"items": len(plan.items), "cost": plan.total_cost}
@@ -329,6 +340,8 @@ async def red_team(ctx):
     blocks = [o for o in out.objections if o.action == "block" and o.proposal_id in chains]
     flags = [o for o in out.objections if o.action == "flag" and o.proposal_id in chains]
     rc.stats["red_team_flags"] = rc.stats.get("red_team_flags", 0) + len(flags)
+    observe.emit("red_team_review", reviewed=list(chains), round=ctx.state["red_team_rounds"],
+                 blocks=[o.model_dump() for o in blocks], flags=[o.model_dump() for o in flags])
     if not blocks:
         return {"blocks": 0, "flags": len(flags)}
     if ctx.state["red_team_rounds"] >= RED_TEAM_CAP:
@@ -366,6 +379,8 @@ async def client(ctx):
         "round": ctx.state["client_rounds"], "decision": decision,
         "reason_codes": list(verdict.reason_codes), "vetoed": vetoed,
         "message": verdict.message}]
+    observe.emit("client_verdict", round=ctx.state["client_rounds"],
+                 remote=bool(settings.client_url), **verdict.model_dump(mode="json"))
     rc.note(f"client round {ctx.state['client_rounds']}: {decision} {list(verdict.reason_codes)}")
     if decision == "accept":
         ctx.route = "accept"
@@ -440,6 +455,8 @@ async def adapt(ctx):
     ctx.state["blocked"] = blocked
     if out.budget_days and 0 < out.budget_days < ctx.state["budget_days"]:
         ctx.state["budget_days"] = out.budget_days
+    observe.emit("adaptation", effective_budget_days=ctx.state["budget_days"], blocked=blocked,
+                 **out.model_dump(mode="json"))
     rc.note(f"adapt: drop {out.drop}, budget {ctx.state['budget_days']:g}, "
             f"request '{out.request}' -> {out.team or '-'}; {out.reasoning[:160]}")
     if out.request and out.team in TEAMS:
@@ -475,6 +492,8 @@ async def single_llm(ctx):
     rc.team_kb.add_plan(rc.run_id, plan)
     rc.current_plan = plan
     ctx.state["plan_id"] = plan.id
+    observe.emit("plan", plan=plan.model_dump(mode="json"), arbitrated=False,
+                 titles={p.id: p.title for p in props}, teams={p.id: p.team for p in props})
     rc.note(f"single LLM: {len(items)} items, {plan.total_cost:g}d")
     return {"items": len(items)}
 
