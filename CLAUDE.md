@@ -80,6 +80,21 @@ and modify any part in the viva, so:
   before writing the call. Do not guess signatures.
 - Windows: never run two `pip install` against this venv at once (`WinError 5`).
 
-## Current status
+## Current status (29 Sep 2026)
 
-- **Now:** build order B0 onward (`PLAN.md` Section 5).
+- **Built:** B0-B13 (`PLAN.md` Section 5). 47 offline tests pass (`pytest -q`).
+- **Verified live:** deterministic audit of umami (58 findings, no LLM); qwen3 structured call
+  (~95 s with think disabled); MCP server over stdio; Client over A2A on localhost.
+- **Blocked on the owner:**
+  1. `pip install -r requirements.txt` from a network without Sophos TLS inspection
+     (playwright, axe-playwright-python, lizard), then `playwright install chromium`.
+  2. `.env`: GOOGLE_API_KEY (AI Studio, no billing), GITHUB_TOKEN, PSI_API_KEY.
+  3. Replace `products/constraints/umami.yaml` (demo, circular) and write answer-key themes,
+     both by a member who has not read the prompts, before any evaluation run.
+- **Verified facts (do not re-derive):**
+  - LiteLLM + Ollama qwen3 needs `reasoning_effort="none"` (think=false), else >600 s per call.
+  - osv-scanner 2.6 `--recursive` walks the drive root on Windows; pass `-L <lockfile>`.
+  - ADK: a node must not set `ctx.route` before yielding `RequestInput`, or resume fast-forwards.
+  - ADK: two routed edges between the same node pair = "Duplicate edge"; use `DEFAULT_ROUTE`.
+  - Discourse robots.txt disallows `/search`; use `/top.json`.
+  - Python httpx reaches the internet on campus; only PyPI is intercepted. `gh` and `npm` work.

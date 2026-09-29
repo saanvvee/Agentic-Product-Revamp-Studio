@@ -140,20 +140,20 @@ Manager, Principal, Comparative UX.
 
 Each step ends runnable and tested. Tick when merged to `main`.
 
-- [ ] **B0 Infra:** `requirements.txt` pins, `pyproject.toml`, `.env.example`, `.gitignore`, package skeleton `revamp/`, settings loader
-- [ ] **B1 Contracts (M1):** pydantic models for `Finding`, `Proposal`, `Conflict`, `Plan`, `ClientVerdict`, `RunRecord`
-- [ ] **B2 LLM layer (M0):** model registry (qwen3 via `ollama_chat`, Gemini), disk cache hooked in via ADK model callbacks, semaphore(3), Phoenix tracing
-- [ ] **B3 Knowledge base (M2):** SQLite, namespaces, role-based access, provenance links, tests (team role cannot read `client_private`)
-- [ ] **B4 Tool runners:** PSI, Lighthouse local, axe, Playwright screenshots, osv-scanner, scc, lizard, GitHub issues, Discourse, SEO crawl. Each returns `Finding`s; each has a recorded-fixture test
-- [ ] **B5 MCP server (M3):** `MCPServer` exposing runners and KB reads, caller role enforced
-- [ ] **B6 Product configs:** `products/{umami,mautic,plane,invoiceninja}.yaml` (URLs, repo, forum, release cut-off, budget); optional docker compose for replay
-- [ ] **B7 Arbitration solvers (M8):** budget ILP (`scipy.optimize.milp`), dependency toposort, provenance validator. Pure functions, unit-tested
-- [ ] **B8 Agents:** Chief Diagnostician, Voice of Customer, Journey Auditor, Design, Engineering, Product & Pricing, Conflict Detector, Red Team, Engagement Lead, Client
-- [ ] **B9 Orchestration (M9):** ADK `Workflow` graph with bounded back-edges; baselines A0 and A1 as separate entry points
-- [ ] **B10 Client over A2A + HITL (M10):** separate process, private constraints, veto; `RequestInput` approval for high-impact items; in-process fallback
-- [ ] **B11 Evaluation (M11):** arm runner A0–A6, metrics in code, answer-key scorer, results tables
-- [ ] **B12 Dashboard (M12):** static HTML report per run (conflict register, budget ledger, plan, trace link)
-- [ ] **B13 Walkthroughs:** `docs/walkthrough/<module>.md` per module, with viva questions
+- [x] **B0 Infra:** `requirements.txt` pins, `pyproject.toml`, `.env.example`, `.gitignore`, package skeleton `revamp/`, settings loader
+- [x] **B1 Contracts (M1):** pydantic models for `Finding`, `Proposal`, `Conflict`, `Plan`, `ClientVerdict`, `RunRecord`
+- [x] **B2 LLM layer (M0):** model registry (qwen3 via `ollama_chat`, Gemini), disk cache as a `BaseLlm` wrapper (`CachedLlm`), semaphore(3), Phoenix tracing
+- [x] **B3 Knowledge base (M2):** SQLite, namespaces, role-based access, provenance links, tests (team role cannot read `client_private`)
+- [~] **B4 Tool runners:** (PSI needs a key; axe/journeys need Playwright, blocked by campus TLS; rest verified live) PSI, Lighthouse local, axe, Playwright screenshots, osv-scanner, scc, lizard, GitHub issues, Discourse, SEO crawl. Each returns `Finding`s; each has a recorded-fixture test
+- [x] **B5 MCP server (M3):** `MCPServer` exposing runners and KB reads, caller role enforced
+- [x] **B6 Product configs:** `products/{umami,mautic,plane,invoiceninja}.yaml` (URLs, repo, forum, release cut-off, budget); optional docker compose for replay
+- [x] **B7 Arbitration solvers (M8):** budget ILP (`scipy.optimize.milp`), dependency toposort, provenance validator. Pure functions, unit-tested
+- [x] **B8 Agents:** Chief Diagnostician, Voice of Customer, Journey Auditor, Design, Engineering, Product & Pricing, Conflict Detector, Red Team, Engagement Lead, Client
+- [x] **B9 Orchestration (M9):** ADK `Workflow` graph with bounded back-edges; baselines A0 and A1 as separate entry points
+- [x] **B10 Client over A2A + HITL (M10):** separate process, private constraints, veto; `RequestInput` approval for high-impact items; in-process fallback
+- [x] **B11 Evaluation (M11):** arm runner A0–A6, metrics in code, answer-key scorer, results tables
+- [x] **B12 Dashboard (M12):** static HTML report per run (conflict register, budget ledger, plan, trace link)
+- [x] **B13 Walkthroughs:** `docs/walkthrough/<module>.md` per module, with viva questions
 
 ---
 
