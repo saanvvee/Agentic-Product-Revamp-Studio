@@ -6,7 +6,7 @@ there directly with the OpenTelemetry exporter already in the venv, which is wha
 the langfuse SDK does internally.
 
   * Self-hosted: deploy/langfuse (Docker Compose); keys from deploy/langfuse/.env.
-  * Langfuse Cloud Hobby: free, no card; set LANGFUSE_HOST=https://cloud.langfuse.com.
+  * Langfuse Cloud Hobby: free, no card; set LANGFUSE_BASE_URL=https://cloud.langfuse.com.
   * Phoenix (optional, both can run): `phoenix serve`, PHOENIX_COLLECTOR_ENDPOINT.
 
 Agent, model and tool spans come from the OpenInference ADK instrumentor; workflow
@@ -23,7 +23,7 @@ _provider = None
 
 def backends() -> dict[str, dict]:
     out = {}
-    host = os.getenv("LANGFUSE_HOST", "").rstrip("/")
+    host = os.getenv("LANGFUSE_BASE_URL", "").rstrip("/")
     pk, sk = os.getenv("LANGFUSE_PUBLIC_KEY", ""), os.getenv("LANGFUSE_SECRET_KEY", "")
     if host and pk and sk:
         auth = base64.b64encode(f"{pk}:{sk}".encode()).decode()

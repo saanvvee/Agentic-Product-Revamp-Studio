@@ -68,7 +68,7 @@ and replay any past run without a model.
 [Walkthrough 05](docs/walkthrough/05-observability-dashboard.md) explains it.
 
 Traces (OpenTelemetry, one trace per run) go to either backend:
-- **Langfuse:** set `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. Langfuse
+- **Langfuse:** set `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. Langfuse
   Cloud Hobby is free with no card. `deploy/langfuse` self-hosts it on a machine with RAM to
   spare.
 - **Phoenix:** `python -m phoenix.server.main serve` and

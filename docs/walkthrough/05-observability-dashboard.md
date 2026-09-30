@@ -42,7 +42,7 @@ Choosing a backend on this laptop:
 - **Langfuse self-hosted** (`deploy/langfuse`) needs about 4–6 GB for ClickHouse, Postgres,
   Redis and MinIO. On 30 Sep it exhausted RAM next to Ollama and the Docker pull failed. Use it
   on a bigger machine.
-- **Langfuse Cloud Hobby** is free with no card. Set `LANGFUSE_HOST=https://cloud.langfuse.com`
+- **Langfuse Cloud Hobby** is free with no card. Set `LANGFUSE_BASE_URL=https://cloud.langfuse.com`
   and the keys from its project settings.
 - **Phoenix** (`python -m phoenix.server.main serve`, UI at http://localhost:6006) is light and
   works now. Verified on 30 Sep: OTLP POST returned 200.
