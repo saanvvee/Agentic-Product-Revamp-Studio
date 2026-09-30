@@ -92,7 +92,7 @@ Traces (OpenTelemetry, one trace per run) go to either backend:
 - **Langfuse:** set `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. Langfuse
   Cloud Hobby is free with no card. `deploy/langfuse` self-hosts it on a machine with RAM to
   spare.
-- **Phoenix:** `python -m phoenix.server.main serve` and
+- **Phoenix:** `docker run -p 6006:6006 arizephoenix/phoenix` (not a pip dependency: it conflicts with litellm and google-adk) and
   `PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006`.
 
 Optional pieces:

@@ -44,7 +44,7 @@ Choosing a backend on this laptop:
   on a bigger machine.
 - **Langfuse Cloud Hobby** is free with no card. Set `LANGFUSE_BASE_URL=https://cloud.langfuse.com`
   and the keys from its project settings.
-- **Phoenix** (`python -m phoenix.server.main serve`, UI at http://localhost:6006) is light and
+- **Phoenix** (`docker run -p 6006:6006 arizephoenix/phoenix`, UI at http://localhost:6006; not a pip dependency, see requirements.txt) is light and
   works now. Verified on 30 Sep: OTLP POST returned 200.
 
 ## Mission Control

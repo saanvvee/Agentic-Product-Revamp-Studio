@@ -48,7 +48,7 @@ and modify any part in the viva, so:
 | A2A | `a2a-sdk` 1.1.2, `to_a2a` / `RemoteA2aAgent` | Experimental. `localhost` != `127.0.0.1` for the card origin |
 | KB | `sqlite3` | No ChromaDB (PLAN D4) |
 | Solver | `scipy.optimize.milp` | PLAN D5 |
-| Tracing | `arize-phoenix` self-hosted | `phoenix.otel.register(auto_instrument=True)` |
+| Tracing | Plain OTLP (`revamp/tracing.py`) to Langfuse or Phoenix | No vendor SDK. `arize-phoenix` must NOT be in requirements: it forces openai>=3.8 (litellm needs <3) and OpenTelemetry 1.44 (google-adk needs <=1.42.1). Phoenix UI via Docker if wanted |
 | Audits | PSI API, Lighthouse CLI 13.5 (npx), axe via Playwright, osv-scanner, scc, lizard, GitHub API, Discourse JSON | See `notes/research-2026-09-29.md` |
 
 ## Invariants

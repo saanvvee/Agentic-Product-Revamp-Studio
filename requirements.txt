@@ -6,6 +6,8 @@
 #
 # Network note (29 Sep 2026): the campus network's Sophos SSL inspection breaks
 # pip. Install from a different network or after trusting the campus CA.
+# Check that the full set resolves after any pin change (fresh venv, nothing installed):
+#   python -m pip install --dry-run --ignore-installed -r requirements.txt
 
 # --- Agent framework ---
 # google.adk.workflow graph API, verified 13 Sep 2026 (old branch) and 29 Sep.
@@ -19,6 +21,7 @@ mcp==2.2.0
 a2a-sdk==1.1.2
 uvicorn==0.52.4
 starlette==1.6.0
+sse-starlette==3.4.11
 
 # --- Data and solvers ---
 pydantic==2.13.5
@@ -34,8 +37,15 @@ httpx==0.28.1
 lizard==1.24.0
 
 # --- Observability ---
-arize-phoenix==20.11.0
-arize-phoenix-otel==0.17.1
+# Plain OpenTelemetry OTLP export (revamp/tracing.py) to Langfuse or Phoenix. The Phoenix
+# SERVER (arize-phoenix) is deliberately NOT here: it pulls pydantic-ai-slim[openai] ->
+# openai>=3.8, which contradicts litellm's openai<3, and OpenTelemetry 1.44, which
+# contradicts google-adk's <=1.42.1 (pip ResolutionImpossible, 30 Sep 2026). Run the
+# Phoenix UI separately if wanted: `docker run -p 6006:6006 arizephoenix/phoenix`.
+opentelemetry-api==1.42.1
+opentelemetry-sdk==1.42.1
+opentelemetry-exporter-otlp-proto-http==1.42.1
+openinference-instrumentation==0.1.63
 openinference-instrumentation-google-adk==0.1.27
 
 # --- Tests ---
