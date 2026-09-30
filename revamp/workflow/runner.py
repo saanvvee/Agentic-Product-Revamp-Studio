@@ -17,6 +17,7 @@ from revamp import observe, tracing
 from revamp.contracts import Plan, RunRecord, stable_id, utcnow
 from revamp.kb import KnowledgeBase
 from revamp.llm.cache import current_ledger
+from revamp.llm.registry import LOCAL_TIER, describe_route
 from revamp.products import load_product
 from revamp.settings import settings
 from revamp.workflow import run_context as runs
@@ -73,6 +74,7 @@ async def run_engagement(product: str, arm: str = "A2", seed: int = 0, *,
             observe.emit("run_started", product=product, arm=arm, seed=seed,
                          arm_description=rc.arm.description, budget_days=prod.budget_days,
                          mode=mode or settings.model_mode, graph=describe(rc.arm),
+                         models={r: describe_route(r, mode) for r in LOCAL_TIER},
                          trace_id=tid, trace_url=tracing.trace_url(tid))
             await _drive(rc, product, approver)
             observe.set_output(root, {"plan_id": record.plan_id, "status": record.status})
@@ -123,6 +125,8 @@ def _write_log(rc: runs.RunContext) -> None:
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{rc.run_id}.json").write_text(json.dumps({
         "record": json.loads(rc.record.model_dump_json()),
+        # Which model served each agent: needed to compare runs fairly.
+        "models": {r: describe_route(r, rc.crew.mode) for r in LOCAL_TIER},
         "log": rc.log, "stats": rc.stats,
         "plan": json.loads(rc.current_plan.model_dump_json()) if rc.current_plan else None,
     }, indent=1), encoding="utf-8")

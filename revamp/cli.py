@@ -1,5 +1,7 @@
 """Command line:  python -m revamp <command> ...
 
+  doctor [--gpu]                   check this machine is ready (--gpu: load each model and
+                                   confirm it sits in VRAM)
   products                         list configured products
   audit <product> [--agentic]      gather evidence into the KB (no LLM unless --agentic)
   constraints <product>            load the product's private client constraints
@@ -35,6 +37,11 @@ def terminal_approver(pending: dict) -> dict:
         print(f"  {it['id']}: {it['title']} ({it['cost_days']:g}d, risk {it['risk']})")
     raw = input("Ids to REJECT (comma separated, empty = approve all): ").strip()
     return {"rejected": [x.strip() for x in raw.split(",") if x.strip()]}
+
+
+def cmd_doctor(a) -> None:
+    from revamp.doctor import run
+    sys.exit(run(load_models=a.gpu))
 
 
 def cmd_audit(a) -> None:
@@ -111,6 +118,9 @@ def main(argv=None) -> None:
     ap.add_argument("--mode", choices=["hybrid", "local", "gemini"], default=None,
                     help="route all agents to one model family")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("doctor")
+    s.add_argument("--gpu", action="store_true", help="load each model, confirm it is in VRAM")
+    s.set_defaults(fn=cmd_doctor)
     sub.add_parser("products").set_defaults(fn=lambda a: print("\n".join(list_products())))
     s = sub.add_parser("audit")
     s.add_argument("product")

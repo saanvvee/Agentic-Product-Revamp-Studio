@@ -32,4 +32,5 @@ def engagement_lead(**kw):
 
 
 def engagement_lead_adapter(**kw):
-    return make_agent("engagement_lead", ADAPT, ClientAdaptation, **kw)
+    return make_agent("engagement_lead", ADAPT, ClientAdaptation, route="engagement_adapter",
+                      **kw)

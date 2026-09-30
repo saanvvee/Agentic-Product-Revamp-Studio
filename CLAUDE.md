@@ -42,7 +42,7 @@ and modify any part in the viva, so:
 |---|---|---|
 | Python | 3.11.9 in `.venv` | Always call `.venv/Scripts/python.exe`; machine default is 3.12 |
 | Agent framework | `google-adk` 2.9.0 | `google.adk.workflow`: `Workflow(edges=[...])`, `ctx.route`, `ctx.run_node`, `RequestInput`. ADK 1.x blog patterns do not apply |
-| Local LLM | Ollama, `qwen3:4b-instruct` via `LiteLlm` | Prefix MUST be `ollama_chat`. Used for all LLM calls locally by default. |
+| Local LLM | Ollama via `LiteLlm`, three tiers: instruct `qwen3:4b-instruct-2507-q4_K_M`, thinking `qwen3:4b-thinking-2507-q4_K_M`, vision `qwen3-vl:4b-instruct` | Prefix MUST be `ollama_chat`. Per-agent tier in `registry.LOCAL_TIER`. GPU forced (`num_gpu=999`). Plain `qwen3:4b` / `qwen3-vl:4b` are THINKING variants - use the explicit tags |
 | Hosted LLM | Gemini Flash, AI Studio free tier | Optional hosted alternative (switch via `REVAMP_MODEL_MODE=gemini`) |
 | Tool layer | `mcp` 2.2.0 | Server class is `MCPServer` (not `FastMCP`) |
 | A2A | `a2a-sdk` 1.1.2, `to_a2a` / `RemoteA2aAgent` | Experimental. `localhost` != `127.0.0.1` for the card origin |
@@ -92,8 +92,8 @@ and modify any part in the viva, so:
      Langfuse: Cloud Hobby keys (free), or self-host `deploy/langfuse` on a machine with RAM.
   2. Replace `products/constraints/umami.yaml` (demo, circular), write constraints for the
      other products and answer-key themes, by a member who has not read the prompts.
-  - LiteLLM + Ollama qwen3 uses `reasoning_effort="none"` (think=false) for structured output.
-  - Local model `qwen3:4b-instruct` is wired for all agent calls by default. Outdated latency measurements from previous hardware do not apply to this setup.
+  - LiteLLM maps `reasoning_effort` to Ollama `think`: "none" -> false (instruct, vision), "medium" -> true (thinking tier). Extra LiteLlm kwargs (num_ctx, num_gpu) land in Ollama's `options`; keep_alive and think are top-level (verified on the wire).
+  - Run machine: a friend's GPU laptop. Setup is `scripts/setup.ps1` (Windows) or `scripts/setup.sh`, then `python -m revamp doctor --gpu`.
   - osv-scanner 2.6 `--recursive` walks the drive root on Windows; pass `-L <lockfile>`.
   - ADK: a node must not set `ctx.route` before yielding `RequestInput`, or resume fast-forwards.
   - ADK: two routed edges between the same node pair = "Duplicate edge"; use `DEFAULT_ROUTE`.

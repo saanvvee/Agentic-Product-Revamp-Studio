@@ -8,7 +8,7 @@ from google.adk.models.base_llm import BaseLlm
 from google.genai import types
 from pydantic import BaseModel
 
-from revamp.llm.registry import family_for, model_for
+from revamp.llm.registry import model_for
 
 TEMPERATURE = 0.2
 
@@ -24,17 +24,15 @@ Rules:
 
 def make_agent(name: str, instruction: str, schema: type[BaseModel], *, seed: int = 0,
                tools: list | None = None, mode: str | None = None,
-               override: BaseLlm | None = None) -> LlmAgent:
-    family = "scripted" if override is not None else family_for(name, mode)
-    text = instruction.strip() + "\n" + COMMON_RULES
-    if family == "local":
-        # qwen3 "thinks" at length before answering by default; on a CPU that costs
-        # minutes per call. /no_think switches that off for structured tasks.
-        text = "/no_think\n" + text
+               override: BaseLlm | None = None, route: str | None = None) -> LlmAgent:
+    """`route` picks the model (registry.LOCAL_TIER) and defaults to the agent name.
+    Two roles reuse a name under a different route: engagement_adapter and
+    handoff_reviewer. Whether a local model reasons first is decided by its tier
+    (Ollama think on/off), not by a prompt tag."""
     return LlmAgent(
         name=name,
-        model=model_for(name, seed=seed, mode=mode, override=override),
-        instruction=text,
+        model=model_for(route or name, seed=seed, mode=mode, override=override),
+        instruction=instruction.strip() + "\n" + COMMON_RULES,
         output_schema=schema,
         output_key=f"{name}_out",
         tools=tools or [],

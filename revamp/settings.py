@@ -24,9 +24,13 @@ def _flag(name: str, default: str = "0") -> bool:
 class Settings:
     root: Path
     gemini_model: str
-    local_model: str
     ollama_api_base: str
-    local_num_ctx: int
+    ollama_models: dict[str, str]  # tier -> Ollama tag: instruct | thinking | vision
+    ollama_num_ctx: dict[str, int]  # tier -> context window
+    ollama_num_gpu: int  # layers offloaded to GPU; 999 = all (force GPU), -1 = Ollama decides
+    ollama_keep_alive: str  # keep models loaded between calls (avoids reload per call)
+    llm_timeout: int  # seconds per model call
+    local_tier_overrides: dict[str, str]  # agent route -> tier, from REVAMP_LOCAL_TIERS
     model_mode: str  # "hybrid" | "local" | "gemini"
     cache_dir: Path
     cache_read_only: bool
@@ -42,13 +46,48 @@ class Settings:
     client_url: str  # A2A Client service; empty = in-process client
 
 
+def _instruct_default() -> str:
+    # Back-compat: REVAMP_LOCAL_MODEL (ollama_chat/<tag>) used to name the one local model.
+    legacy = os.getenv("REVAMP_LOCAL_MODEL", "")
+    if legacy:
+        return legacy.split("/", 1)[-1]
+    return "qwen3:4b-instruct-2507-q4_K_M"
+
+
+def _tier_overrides() -> dict[str, str]:
+    """REVAMP_LOCAL_TIERS="red_team=instruct,design=thinking" moves agents between tiers."""
+    out = {}
+    for pair in os.getenv("REVAMP_LOCAL_TIERS", "").split(","):
+        if "=" in pair:
+            agent, tier = (x.strip() for x in pair.split("=", 1))
+            out[agent] = tier
+    return out
+
+
 def load() -> Settings:
     return Settings(
         root=ROOT,
         gemini_model=os.getenv("REVAMP_GEMINI_MODEL", "gemini-2.5-flash"),
-        local_model=os.getenv("REVAMP_LOCAL_MODEL", "ollama_chat/qwen3:4b-instruct"),
         ollama_api_base=os.getenv("OLLAMA_API_BASE", "http://localhost:11434"),
-        local_num_ctx=int(os.getenv("REVAMP_NUM_CTX", "4096")),
+        # Explicit tags on purpose: in the Ollama library "qwen3:4b" and "qwen3-vl:4b"
+        # both resolve to THINKING variants (checked against registry digests, 30 Sep).
+        ollama_models={
+            "instruct": os.getenv("REVAMP_OLLAMA_INSTRUCT", _instruct_default()),
+            "thinking": os.getenv("REVAMP_OLLAMA_THINKING", "qwen3:4b-thinking-2507-q4_K_M"),
+            "vision": os.getenv("REVAMP_OLLAMA_VISION", "qwen3-vl:4b-instruct"),
+        },
+        # Our prompts are ~2-4k tokens plus a ~1.5k answer; 4096 would silently cut the
+        # start of the prompt. Thinking needs room for its reasoning tokens; images cost
+        # tokens too.
+        ollama_num_ctx={
+            "instruct": int(os.getenv("REVAMP_NUM_CTX", "8192")),
+            "thinking": int(os.getenv("REVAMP_NUM_CTX_THINKING", "16384")),
+            "vision": int(os.getenv("REVAMP_NUM_CTX_VISION", "16384")),
+        },
+        ollama_num_gpu=int(os.getenv("REVAMP_OLLAMA_NUM_GPU", "999")),
+        ollama_keep_alive=os.getenv("REVAMP_OLLAMA_KEEP_ALIVE", "30m"),
+        llm_timeout=int(os.getenv("REVAMP_LLM_TIMEOUT", "900")),
+        local_tier_overrides=_tier_overrides(),
         model_mode=os.getenv("REVAMP_MODEL_MODE", "local"),
         cache_dir=ROOT / os.getenv("REVAMP_CACHE_DIR", "cache/llm"),
         cache_read_only=_flag("REVAMP_CACHE_READ_ONLY"),

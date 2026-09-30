@@ -27,16 +27,16 @@ evaluated against a single LLM (A0) and against teams without arbitration (A1).
 
 ## The ten agents, and what is not an agent
 
-| Agent | Decides | Model (Local default / Hybrid) |
+| Agent | Decides | Local tier (default) / hybrid |
 |---|---|---|
-| Engagement Lead | Focus areas; how to adapt after a client rejection | qwen3:4b-instruct (Gemini in hybrid) |
-| Chief Diagnostician | Which audits to run; when evidence is sufficient | qwen3:4b-instruct |
-| Voice of Customer | Which complaints are signal | qwen3:4b-instruct |
-| Journey Auditor | Where journeys break, from step facts (or screenshots in hybrid) | qwen3:4b-instruct (Gemini vision in hybrid) |
-| Design / Engineering / Product & Pricing | What to change, at what cost | qwen3:4b-instruct |
-| Conflict Detector | Which proposals contradict | qwen3:4b-instruct (Gemini in hybrid) |
-| Red Team | Which plan items the evidence does not support | qwen3:4b-instruct (Gemini in hybrid) |
-| Client | Accept or reject (decision in code, message by LLM) | qwen3:4b-instruct (Gemini in hybrid) |
+| Engagement Lead | Focus areas (instruct); how to adapt after a client rejection (**thinking**) | instruct + thinking (Gemini in hybrid) |
+| Chief Diagnostician | Which audits to run; when evidence is sufficient | instruct (multi-turn tool loop) |
+| Voice of Customer | Which complaints are signal | instruct |
+| Journey Auditor | Where journeys break, from screenshots | **vision** (Gemini in hybrid) |
+| Design / Engineering / Product & Pricing | What to change, at what cost; Engineering's handoff review is **thinking** | instruct (review: thinking) |
+| Conflict Detector | Which proposals contradict | **thinking** (Gemini in hybrid) |
+| Red Team | Which plan items the evidence does not support | **thinking** (Gemini in hybrid) |
+| Client | Accept or reject (decision in code, message by LLM) | instruct (Gemini in hybrid) |
 
 **Not agents:**
 - The audit tools, which measure.
@@ -60,7 +60,7 @@ Rule: a component is an agent only if it makes a judgment a model is needed for.
 
 ## Honest limitations (put these in the report)
 
-- All agents run locally with Ollama `qwen3:4b-instruct` by default. Previous benchmarks noting long CPU delays were specific to older test devices; the current host environment runs local inference directly.
+- Local mode has three Ollama tiers (`revamp/llm/registry.py`, `LOCAL_TIER`): instruct `qwen3:4b-instruct-2507-q4_K_M`, thinking `qwen3:4b-thinking-2507-q4_K_M`, vision `qwen3-vl:4b-instruct`. Thinking is used only where judgment is the point (conflicts, red team, feasibility, inferring hidden constraints) because it is several times slower. Every request forces the GPU (`num_gpu=999`); `python -m revamp doctor --gpu` confirms each model sits in VRAM.
 - The client's decision is rule-based on purpose (exact metric). The LLM only words the reply.
   So "information asymmetry" means inferring constraints from coarse reason codes, not from free
   conversation.

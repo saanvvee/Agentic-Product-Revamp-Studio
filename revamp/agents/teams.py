@@ -50,4 +50,4 @@ def team(name: str, extra: str = "", **kw):
 
 
 def handoff_reviewer(**kw):
-    return make_agent("engineering", HANDOFF, HandoffReview, **kw)
+    return make_agent("engineering", HANDOFF, HandoffReview, route="handoff_reviewer", **kw)
