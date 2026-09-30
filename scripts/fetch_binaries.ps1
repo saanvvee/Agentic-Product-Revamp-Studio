@@ -26,7 +26,9 @@ Remove-Item $zip
 Write-Host "browser worker: Playwright + axe-core (versions pinned in browser_worker/package.json)"
 Push-Location (Join-Path $PSScriptRoot "..\browser_worker")
 npm install --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "npm install failed" }
 npx playwright install chromium
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "playwright install failed" }
 Pop-Location
 
 Get-ChildItem $bin
