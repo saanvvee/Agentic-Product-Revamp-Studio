@@ -38,10 +38,31 @@ py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 powershell -ExecutionPolicy Bypass -File scripts\fetch_binaries.ps1   # osv-scanner, scc, browser worker + Chromium
 copy .env.example .env    # then fill in keys if needed (defaults to local Ollama)
-ollama pull qwen3:4b-instruct
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+ollama pull qwen3:4b-thinking-2507-q4_K_M
+ollama pull qwen3-vl:4b-instruct
 ```
 
-Everything runs locally by default via Ollama (`qwen3:4b-instruct`). Gemini can be used as an optional alternative.
+Everything runs locally by default via Ollama, in three tiers: **instruct** for most agents,
+**thinking** for the arbitration judgments (Conflict Detector, Red Team, feasibility review,
+inferring the client's hidden constraints), and **vision** for the Journey Auditor's
+screenshots. Gemini is an optional alternative (`REVAMP_MODEL_MODE=hybrid|gemini`).
+
+### Plug and play on a GPU machine
+
+```powershell
+git clone https://github.com/goyalaakarsh/ai-prj.git; cd ai-prj
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1     # Linux/macOS: bash scripts/setup.sh
+```
+
+This creates the venv, installs everything, downloads the audit binaries and Chromium, creates
+`.env`, pulls the three models, audits the demo product, and runs
+`python -m revamp doctor --gpu`. That last step loads each model and fails loudly if a model is
+not in VRAM. Every model call forces the GPU (`REVAMP_OLLAMA_NUM_GPU=999`). The only manual
+step is adding `GITHUB_TOKEN` to `.env`.
+
+Ollama on another machine: run `OLLAMA_HOST=0.0.0.0 ollama serve` there and set
+`OLLAMA_API_BASE=http://<its-ip>:11434` here.
 public APIs. The campus network's TLS inspection blocks PyPI; install from another network.
 
 ## Use

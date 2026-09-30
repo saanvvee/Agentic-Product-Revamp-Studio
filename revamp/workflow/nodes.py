@@ -39,7 +39,7 @@ from revamp.contracts import (
     stable_id,
     utcnow,
 )
-from revamp.llm.registry import family_for
+from revamp.llm.registry import sees_images
 from revamp.settings import settings
 from revamp.workflow import prompts
 from revamp.workflow import run_context as runs
@@ -143,9 +143,9 @@ async def _journey(rc) -> list[str]:
     facts = [f for f in fs if f.category == "journey" and f.severity != "info"
              and f.evidence.locator in locators and "llm_observation" not in f.tags]
     images = []
-    vision = "journey_auditor" in rc.crew.overrides or \
-        family_for("journey_auditor", rc.crew.mode) == "gemini"
-    if vision:  # the local 4B model has no vision; it then reasons from step facts only
+    vision = "journey_auditor" in rc.crew.overrides or sees_images("journey_auditor",
+                                                                     rc.crew.mode)
+    if vision:  # a text-only model gets the step facts only
         for s in steps:
             data = Path(s.evidence.artifact_path).read_bytes()
             if len(data) < 4_000_000:

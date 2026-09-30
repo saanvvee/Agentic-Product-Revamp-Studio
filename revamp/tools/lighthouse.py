@@ -148,7 +148,9 @@ def _chrome_env() -> dict[str, str]:
     if "CHROME_PATH" not in env:
         for cand in (r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                      r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"):
+                     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                     "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"):
             if Path(cand).is_file():
                 env["CHROME_PATH"] = cand
                 break

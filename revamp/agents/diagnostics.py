@@ -13,6 +13,7 @@ trust a prompt to bound a loop).
 from __future__ import annotations
 
 import os
+import sys
 
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
@@ -40,7 +41,7 @@ def mcp_toolset(product: str, role: str = "team") -> McpToolset:
     return McpToolset(
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
-                command=str(settings.root / ".venv" / "Scripts" / "python.exe"),
+                command=sys.executable,  # this venv's Python, on any OS
                 args=["-m", "revamp.mcp_server", "--product", product, "--role", role],
                 cwd=str(settings.root),
                 # The MCP client passes only a minimal environment by default; our own
