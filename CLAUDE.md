@@ -42,8 +42,8 @@ and modify any part in the viva, so:
 |---|---|---|
 | Python | 3.11.9 in `.venv` | Always call `.venv/Scripts/python.exe`; machine default is 3.12 |
 | Agent framework | `google-adk` 2.9.0 | `google.adk.workflow`: `Workflow(edges=[...])`, `ctx.route`, `ctx.run_node`, `RequestInput`. ADK 1.x blog patterns do not apply |
-| Local LLM | Ollama 0.30.10, `qwen3:4b` via `LiteLlm` | Prefix MUST be `ollama_chat` (wrong prefix fails silently). Gemma 3 cannot tool-call. ~80 s per tool round trip on CPU |
-| Hosted LLM | Gemini Flash, AI Studio free tier | Limits only on the AI Studio dashboard. Scarce |
+| Local LLM | Ollama, `qwen3:4b-instruct` via `LiteLlm` | Prefix MUST be `ollama_chat`. Used for all LLM calls locally by default. |
+| Hosted LLM | Gemini Flash, AI Studio free tier | Optional hosted alternative (switch via `REVAMP_MODEL_MODE=gemini`) |
 | Tool layer | `mcp` 2.2.0 | Server class is `MCPServer` (not `FastMCP`) |
 | A2A | `a2a-sdk` 1.1.2, `to_a2a` / `RemoteA2aAgent` | Experimental. `localhost` != `127.0.0.1` for the card origin |
 | KB | `sqlite3` | No ChromaDB (PLAN D4) |
@@ -92,8 +92,8 @@ and modify any part in the viva, so:
      Langfuse: Cloud Hobby keys (free), or self-host `deploy/langfuse` on a machine with RAM.
   2. Replace `products/constraints/umami.yaml` (demo, circular), write constraints for the
      other products and answer-key themes, by a member who has not read the prompts.
-- **Verified facts (do not re-derive):**
-  - LiteLLM + Ollama qwen3 needs `reasoning_effort="none"` (think=false), else >600 s per call.
+  - LiteLLM + Ollama qwen3 uses `reasoning_effort="none"` (think=false) for structured output.
+  - Local model `qwen3:4b-instruct` is wired for all agent calls by default. Outdated latency measurements from previous hardware do not apply to this setup.
   - osv-scanner 2.6 `--recursive` walks the drive root on Windows; pass `-L <lockfile>`.
   - ADK: a node must not set `ctx.route` before yielding `RequestInput`, or resume fast-forwards.
   - ADK: two routed edges between the same node pair = "Duplicate edge"; use `DEFAULT_ROUTE`.

@@ -27,16 +27,16 @@ evaluated against a single LLM (A0) and against teams without arbitration (A1).
 
 ## The ten agents, and what is not an agent
 
-| Agent | Decides | Model (hybrid) |
+| Agent | Decides | Model (Local default / Hybrid) |
 |---|---|---|
-| Engagement Lead | Focus areas; how to adapt after a client rejection | Gemini |
-| Chief Diagnostician | Which audits to run; when evidence is sufficient | qwen3 |
-| Voice of Customer | Which complaints are signal | qwen3 |
-| Journey Auditor | Where journeys break, from screenshots | Gemini (vision) |
-| Design / Engineering / Product & Pricing | What to change, at what cost | qwen3 / qwen3 / Gemini |
-| Conflict Detector | Which proposals contradict | Gemini |
-| Red Team | Which plan items the evidence does not support | Gemini |
-| Client | Accept or reject (decision in code, message by LLM) | Gemini |
+| Engagement Lead | Focus areas; how to adapt after a client rejection | qwen3:4b-instruct (Gemini in hybrid) |
+| Chief Diagnostician | Which audits to run; when evidence is sufficient | qwen3:4b-instruct |
+| Voice of Customer | Which complaints are signal | qwen3:4b-instruct |
+| Journey Auditor | Where journeys break, from step facts (or screenshots in hybrid) | qwen3:4b-instruct (Gemini vision in hybrid) |
+| Design / Engineering / Product & Pricing | What to change, at what cost | qwen3:4b-instruct |
+| Conflict Detector | Which proposals contradict | qwen3:4b-instruct (Gemini in hybrid) |
+| Red Team | Which plan items the evidence does not support | qwen3:4b-instruct (Gemini in hybrid) |
+| Client | Accept or reject (decision in code, message by LLM) | qwen3:4b-instruct (Gemini in hybrid) |
 
 **Not agents:**
 - The audit tools, which measure.
@@ -60,8 +60,7 @@ Rule: a component is an agent only if it makes a judgment a model is needed for.
 
 ## Honest limitations (put these in the report)
 
-- `qwen3:4b` on this CPU takes 90–110 s per call. A full local run is tens of minutes, and the
-  evaluation needs overnight runs or Gemini.
+- All agents run locally with Ollama `qwen3:4b-instruct` by default. Previous benchmarks noting long CPU delays were specific to older test devices; the current host environment runs local inference directly.
 - The client's decision is rule-based on purpose (exact metric). The LLM only words the reply.
   So "information asymmetry" means inferring constraints from coarse reason codes, not from free
   conversation.

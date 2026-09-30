@@ -37,11 +37,11 @@ Ten LLM agents and two deterministic solvers. The audits are MCP tools, not agen
 py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 powershell -ExecutionPolicy Bypass -File scripts\fetch_binaries.ps1   # osv-scanner, scc, browser worker + Chromium
-copy .env.example .env    # then fill in GOOGLE_API_KEY, GITHUB_TOKEN, PSI_API_KEY
-ollama pull qwen3:4b
+copy .env.example .env    # then fill in keys if needed (defaults to local Ollama)
+ollama pull qwen3:4b-instruct
 ```
 
-Everything is free: Gemini through AI Studio (no billing account), Ollama locally, and
+Everything runs locally by default via Ollama (`qwen3:4b-instruct`). Gemini can be used as an optional alternative.
 public APIs. The campus network's TLS inspection blocks PyPI; install from another network.
 
 ## Use

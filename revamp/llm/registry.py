@@ -1,8 +1,7 @@
 """Which model each agent uses. The only place that names a model class.
 
-Hybrid routing (default): Gemini for agents that plan, arbitrate, negotiate or need
-vision; local qwen3:4b for high-volume, narrower agents. Mode "local" or "gemini"
-routes everything to one family, which is itself an experiment (quality vs quota).
+Local routing (default): local qwen3:4b-instruct via Ollama for all LLM calls.
+Mode "hybrid" or "gemini" routes agents according to hybrid specialization or to Gemini.
 
 Every model handed out is wrapped in CachedLlm. There is no code path that returns
 an uncached model (invariant 1).
@@ -53,12 +52,9 @@ def _inner(family: str) -> BaseLlm:
     from google.adk.models.lite_llm import LiteLlm
     # The ollama_chat/ prefix is mandatory: plain ollama/ silently drops tool calls.
     # num_ctx: Ollama's default context is small; our prompts are ~2-4k tokens.
-    # reasoning_effort="none": LiteLLM maps it to Ollama's think=false. Without it
-    # qwen3 "thinks" for many minutes on a CPU before answering (a single call hit
-    # LiteLLM's 600 s timeout on 29 Sep; the same call with think=false took ~20 s).
-    # timeout: a long structured answer on this CPU can pass LiteLLM's 600 s default.
-    return LiteLlm(model=settings.local_model, num_ctx=8192, reasoning_effort="none",
-                   timeout=1200)
+    # reasoning_effort="none": LiteLLM maps it to Ollama's think=false.
+    return LiteLlm(model=settings.local_model, api_base=settings.ollama_api_base,
+                   num_ctx=settings.local_num_ctx, reasoning_effort="none", timeout=1200)
 
 
 _SCRATCH: Path | None = None

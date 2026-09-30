@@ -25,7 +25,7 @@ Evidence URLs are in `notes/research-2026-09-29.md`.
 | F6 | ADK graph cycles are **not bounded automatically**. | Every rejection/back-edge loop needs an explicit counter in code. |
 | F7 | `Workflow.max_concurrency` does **not** throttle nodes started with `ctx.run_node()`. | Dynamic fan-out needs our own `asyncio.Semaphore` or `max_parallel_workers`. |
 | F8 | ADK A2A is marked **EXPERIMENTAL**. `localhost` and `127.0.0.1` are different origins. | Keep a same-process fallback for the Client agent. |
-| F9 | `qwen3:4b` on this CPU: **82.5 s per tool round trip** (measured 13 Sep). | 22 agents with several calls each means **hours per run**. See D1. |
+| F9 | `qwen3:4b-instruct` on local Ollama: all agents wired locally by default. | Previous ~82.5 s CPU metric was measured on an older device; current setup runs local model calls directly. |
 | F10 | npm audit, pip-audit and radon don't fit JS/TS/PHP/Ruby repos without a full install. | Use **osv-scanner** (reads lockfiles from a bare clone) and **lizard** (multi-language complexity) instead. |
 
 ---

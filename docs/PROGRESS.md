@@ -345,7 +345,7 @@ All thirteen planned build steps are done, plus observability.
 | **Exact ILP for the budget** | Greedy selection fails on dependencies and conflicts, which are exactly the cases we care about |
 | **Client decision in code** | The veto is exact, and the evaluation metric uses the same check, so behaviour and measurement cannot drift apart |
 | **Client as a separate process (A2A)** | A process boundary is stronger proof of information hiding than a rule inside one program. A same-process fallback exists because ADK's A2A support is experimental |
-| **Hybrid models** | The local qwen3 model is free but slow and cannot see images. Gemini's free tier is scarce, so it goes to the agents that need vision or heavy reasoning |
+| **Local models by default** | The local `qwen3:4b-instruct` model via Ollama handles all agent calls by default. Gemini remains available as an optional mode (`REVAMP_MODEL_MODE=hybrid` or `gemini`) |
 | **Zero budget** | Nothing that needs payment or a credit card. Gemini only ever receives public data |
 | **Own dashboard as well as Langfuse** | Trace tools show spans. They do not know what a budget ledger, a veto or a handoff rejection is |
 
@@ -353,8 +353,6 @@ All thirteen planned build steps are done, plus observability.
 
 These cost us time and are good viva material.
 
-- **The local model hung for over 10 minutes per call** until we turned off its "thinking" mode
-  (`reasoning_effort="none"` through LiteLLM).
 - **The model prefix matters.** With LiteLLM and Ollama it must be `ollama_chat`. A wrong prefix
   fails silently.
 - **osv-scanner's `--recursive` flag scans the whole drive on Windows.** We pass each lockfile
@@ -378,8 +376,8 @@ These cost us time and are good viva material.
 py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 powershell -ExecutionPolicy Bypass -File scripts\fetch_binaries.ps1
-copy .env.example .env      # then add your keys
-ollama pull qwen3:4b
+copy .env.example .env      # configured for local Ollama by default
+ollama pull qwen3:4b-instruct
 ```
 
 **Everyday commands:**

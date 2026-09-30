@@ -25,6 +25,8 @@ class Settings:
     root: Path
     gemini_model: str
     local_model: str
+    ollama_api_base: str
+    local_num_ctx: int
     model_mode: str  # "hybrid" | "local" | "gemini"
     cache_dir: Path
     cache_read_only: bool
@@ -44,8 +46,10 @@ def load() -> Settings:
     return Settings(
         root=ROOT,
         gemini_model=os.getenv("REVAMP_GEMINI_MODEL", "gemini-2.5-flash"),
-        local_model=os.getenv("REVAMP_LOCAL_MODEL", "ollama_chat/qwen3:4b"),
-        model_mode=os.getenv("REVAMP_MODEL_MODE", "hybrid"),
+        local_model=os.getenv("REVAMP_LOCAL_MODEL", "ollama_chat/qwen3:4b-instruct"),
+        ollama_api_base=os.getenv("OLLAMA_API_BASE", "http://localhost:11434"),
+        local_num_ctx=int(os.getenv("REVAMP_NUM_CTX", "4096")),
+        model_mode=os.getenv("REVAMP_MODEL_MODE", "local"),
         cache_dir=ROOT / os.getenv("REVAMP_CACHE_DIR", "cache/llm"),
         cache_read_only=_flag("REVAMP_CACHE_READ_ONLY"),
         # Invariant 5: never more than 3 LLM calls in flight.
