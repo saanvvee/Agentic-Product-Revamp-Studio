@@ -9,6 +9,7 @@ engineering budget, sequences the survivors by dependency, and negotiates with a
 that holds constraints the team cannot see. The output is a sequenced revamp plan in which every
 item traces back to a tool measurement.
 
+Plain-language summary of the work so far: [docs/PROGRESS.md](docs/PROGRESS.md).
 Scope, decisions and build order: [PLAN.md](PLAN.md). Module walkthroughs for the viva:
 [docs/walkthrough/](docs/walkthrough/).
 
