@@ -57,6 +57,7 @@ async function journey(page, job) {
     } catch (e) {
       error = String(e).slice(0, 300);
     }
+    if (job.waitMs) await page.waitForTimeout(job.waitMs);  // let client-side apps render
     const loadMs = Date.now() - t0;
     const shot = path.join(job.shotDir, `${String(i + 1).padStart(2, "0")}.png`);
     await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
@@ -76,7 +77,8 @@ const OPS = { axe, journey, text };
 const job = await readJob();
 const browser = await chromium.launch({ headless: true });
 try {
-  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const page = await (await browser.newContext({ viewport: job.viewport || VIEWPORT,
+    colorScheme: job.colorScheme || "light" })).newPage();
   if (!OPS[job.op]) throw new Error(`unknown op ${job.op}`);
   process.stdout.write(JSON.stringify(await OPS[job.op](page, job)));
 } catch (e) {
