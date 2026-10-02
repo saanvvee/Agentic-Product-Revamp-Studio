@@ -19,11 +19,13 @@ evaluated against a single LLM (A0) and against teams without arbitration (A1).
 2. **Diagnosis.** The Chief Diagnostician chooses which audits to run over MCP
    (`revamp/mcp_server.py`, `revamp/agents/diagnostics.py`). Alternatively, `audit` runs
    every tool deterministically (`revamp/audit.py`).
+   Either way an audit is a run: it writes a `RunRecord`, per-step events and its own HTML report.
 3. **Engagement.** An ADK 2.9 graph workflow (`revamp/workflow/graph.py`) runs:
    brief → perspectives → propose → handoff → conflicts → allocate → red team → client →
    approve → finalize, with bounded back-edges.
 4. **Output.** A `Plan` plus an HTML report (`revamp/report.py`). `eval` runs arms × seeds
-   and computes metrics in code (`revamp/evaluation.py`).
+   and computes metrics in code (`revamp/evaluation.py`). `revamp report <id>` rebuilds either
+   kind of report from the events and the KB, with no tool call and no model call.
 
 ## The ten agents, and what is not an agent
 
@@ -56,7 +58,7 @@ Rule: a component is an agent only if it makes a judgment a model is needed for.
 | Every loop has a code cap | `workflow/arms.py` caps, checked in `workflow/nodes.py` |
 | At most 3 LLM calls in flight | `llm/cache.py` semaphore |
 | No answer-key leakage | `tools/voice.py` cutoff filter; `tools/code.py` advisory date filter |
-| Evidence cost and LLM cost reported separately | `contracts.py::CostLedger`, `tools/common.py::evidence_timer` |
+| Evidence cost and LLM cost reported separately | `contracts.py::CostLedger`, `tools/common.py::evidence_timer`, and `agents/diagnostics.py` for MCP tools (they run in a child process) |
 
 ## Honest limitations (put these in the report)
 

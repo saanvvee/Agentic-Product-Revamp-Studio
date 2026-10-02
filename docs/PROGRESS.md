@@ -259,7 +259,7 @@ All are computed in code from the knowledge base:
 
 ### Build steps
 
-All thirteen planned build steps are done, plus observability.
+All fourteen planned build steps are done, plus observability.
 
 | Step | What | Status |
 |---|---|---|
@@ -277,19 +277,24 @@ All thirteen planned build steps are done, plus observability.
 | B11 | Evaluation runner and metrics | Done |
 | B12 | HTML report per run | Done |
 | B13 | Module walkthroughs with viva questions | Done |
+| B14 | Audits as runs: run record, per-step events, HTML report, dashboard graph | Done |
 | Extra | Mission Control live dashboard and OpenTelemetry tracing | Done |
 
 ### What has been checked
 
-- **51 automated tests pass** (last run 30 Sep 2026, about 19 seconds). They run offline: agents
-  are replaced by scripted fake models, so the tests check the orchestration itself (routing,
-  loop caps, provenance, veto, all arms, human approval, the real A2A connection) independently
-  of how good the model is.
+- **64 automated tests pass** (last run 2 Oct 2026, about 17 seconds), including 6 that drive a
+  whole audit end to end with scripted tools. They run offline: agents are replaced by scripted
+  fake models, so the tests check the orchestration itself (routing, loop caps, provenance, veto,
+  all arms, human approval, the real A2A connection) independently of how good the model is.
 - **All 7 MCP audit tools work end to end** through a real MCP client against the live Umami
   project, producing 123 findings.
 - **The deterministic audit** (every tool, no LLM) runs end to end.
 - **Tracing reaches Arize Phoenix** (spans received).
-- **The dashboard streams a real run** that uses the local model.
+- **The dashboard streams a real run** that uses the local model, and a real audit.
+- **Audits are runs now.** Each audit writes a `RunRecord`, per-step events (the step's input, its
+  finding ids, its wall time) and an HTML report at `runs/reports/audit-<product>-<stamp>.html`.
+  The report rebuilds from the event file and the knowledge base, so any past audit can be re-read
+  without re-running a tool.
 
 ### Timeline
 
@@ -298,6 +303,7 @@ All thirteen planned build steps are done, plus observability.
 | 13–14 Sep | Previous project idea (industrial incident response) built and explored |
 | 29 Sep | Pivot to Revamp Studio. Old work archived on branch `obsolete/incident-response`. Research, plan, decisions D1–D8, then build steps B0–B13 |
 | 30 Sep | Browser worker, all tools verified live, Mission Control dashboard, tracing, docs |
+| 2 Oct | Audits became runs (B14): run record, per-step events with finding ids, per-audit HTML report, audit graph and KPIs in the dashboard, evidence time for MCP tools booked in the parent process. Fixed the agentic audit never announcing its end and the empty `No LLM calls` inspector |
 
 ## 9. What is still to do
 
@@ -384,6 +390,8 @@ ollama pull qwen3:4b-instruct
 
 ```powershell
 .venv\Scripts\python.exe -m revamp audit umami            # measure the product, no LLM
+.venv\Scripts\python.exe -m revamp audit umami --agentic  # the Chief Diagnostician over MCP
+.venv\Scripts\python.exe -m revamp audit umami --skip journeys,pricing
 .venv\Scripts\python.exe -m revamp constraints umami      # load the Client's private constraints
 .venv\Scripts\python.exe -m revamp run umami --arm A2     # one full engagement
 .venv\Scripts\python.exe -m revamp run umami --hitl       # pause for human approval
@@ -392,7 +400,9 @@ ollama pull qwen3:4b-instruct
 .venv\Scripts\python.exe -m pytest -q                     # run the test suite
 ```
 
-Reports are written to `runs/reports/<run id>.html`.
+Reports are written to `runs/reports/<run id>.html`. That covers an audit too: `revamp audit`
+prints one row per step and the path of its own report, and `python -m revamp report <run id>`
+rebuilds any past report from the event file and the knowledge base without re-running anything.
 
 **Mission Control** shows the workflow graph live: which step is running, which agents are
 working, which loops were taken, and every agent's prompt and answer. It can also start runs,

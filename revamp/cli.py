@@ -44,15 +44,52 @@ def cmd_doctor(a) -> None:
     sys.exit(run(load_models=a.gpu))
 
 
+def _print_audit(out: dict) -> None:
+    """The audit's result on the terminal: one row per step, then the totals. The HTML
+    report has the full detail."""
+    cost = out["cost"]
+    print(f"run {out['run_id']}  status {out['status']}")
+    if out["mode"] == "agentic":
+        print(f"tool calls {out.get('tool_calls', 0)}, LLM calls {cost['llm_calls']} "
+              f"({cost['llm_cache_hits']} cached), evidence {cost['evidence_seconds']:.0f} s "
+              f"+ model {cost['llm_seconds']:.0f} s")
+        rep = out.get("report") or {}
+        if rep:
+            print(f"\n{rep.get('summary', '')}")
+            if rep.get("key_finding_ids"):
+                print("key findings: " + ", ".join(rep["key_finding_ids"]))
+            if rep.get("gaps"):
+                print("gaps: " + ", ".join(rep["gaps"]))
+        print(f"\n{out.get('new_findings', 0)} new findings, "
+              f"{out.get('kb_findings', 0)} in the knowledge base")
+        return
+    rows = out["results"]
+    width = max((len(r["step"]) for r in rows), default=6)
+    print(f"\n{'step'.ljust(width)}  findings   new     time")
+    for r in rows:
+        if r["error"]:
+            print(f"{r['step'].ljust(width)}  SKIPPED: {r['error'][:120]}")
+        else:
+            print(f"{r['step'].ljust(width)}  {r['count']:>8}  {r['new']:>3}  "
+                  f"{r['ms'] / 1000:>5.0f} s")
+    print(f"\n{out['findings']} findings, {out['new']} new; evidence "
+          f"{cost['evidence_seconds']:.0f} s, no model involved (by design)")
+
+
 def cmd_audit(a) -> None:
     from revamp.audit import STEPS, agentic_audit, deterministic_audit
     p = load_product(a.product)
     if a.agentic:
-        out = asyncio.run(agentic_audit(p, max_tool_calls=a.max_tools, mode=a.mode))
+        out = asyncio.run(agentic_audit(p, max_tool_calls=a.max_tools, mode=a.mode,
+                                        kb=_kb("team")))
     else:
         steps = tuple(s for s in STEPS if s not in set(a.skip.split(",")))
         out = asyncio.run(deterministic_audit(p, _kb("team"), a.target, steps))
-    print(json.dumps(out, indent=1))
+    if a.json:
+        print(json.dumps(out, indent=1))
+    else:
+        _print_audit(out)
+        print(f"\nreport: {report.write(out['run_id'])}")
 
 
 def cmd_constraints(a) -> None:
@@ -129,6 +166,8 @@ def main(argv=None) -> None:
     s.add_argument("--target", choices=["live", "local"], default="live")
     s.add_argument("--skip", default="", help="comma list: seo,pricing,voice,code,"
                                               "performance,accessibility,journeys")
+    s.add_argument("--mode", choices=["local", "gemini"], default="local")
+    s.add_argument("--json", action="store_true", help="print the raw result, not the summary")
     s.set_defaults(fn=cmd_audit)
     s = sub.add_parser("constraints")
     s.add_argument("product")

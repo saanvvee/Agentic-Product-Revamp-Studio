@@ -68,12 +68,19 @@ public APIs. The campus network's TLS inspection blocks PyPI; install from anoth
 ## Use
 
 ```powershell
-.venv\Scripts\python.exe -m revamp audit umami            # evidence, no LLM
+.venv\Scripts\python.exe -m revamp audit umami            # evidence, no LLM -> its own report
+.venv\Scripts\python.exe -m revamp audit umami --agentic  # the Chief Diagnostician over MCP
 .venv\Scripts\python.exe -m revamp constraints umami      # load the client's private constraints
 .venv\Scripts\python.exe -m revamp run umami --arm A2     # one engagement -> runs\reports\<id>.html
 .venv\Scripts\python.exe -m revamp run umami --hitl       # pause for human approval
+.venv\Scripts\python.exe -m revamp report <run id>       # rebuild any past report, no tools, no model
 .venv\Scripts\python.exe -m revamp eval umami --arms A0,A1,A2 --seeds 0,1,2
 ```
+
+An audit is a run, so it has a run record, a trace, events and a report of its own at
+`runs/reports/audit-<product>-<stamp>.html`: one row per step with the input it was given, the
+findings it measured and their provenance, the cumulative coverage, and the evidence/orchestration
+cost split.
 
 ## Watch it run
 

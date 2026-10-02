@@ -80,10 +80,21 @@ and modify any part in the viva, so:
   before writing the call. Do not guess signatures.
 - Windows: never run two `pip install` against this venv at once (`WinError 5`).
 
-## Current status (30 Sep 2026)
+## Current status (2 Oct 2026)
 
-- **Built:** B0-B13 plus observability (`revamp/observe.py`, `revamp/tracing.py`) and the
-  Mission Control dashboard (`python -m revamp.dashboard`). 51 offline tests pass.
+- **Built:** B0-B14 plus observability (`revamp/observe.py`, `revamp/tracing.py`) and the
+  Mission Control dashboard (`python -m revamp.dashboard`). 64 offline tests pass.
+- **B14 (2 Oct):** an audit is a run. Both arms write a `RunRecord` (`audit-det`, `audit-agentic`),
+  emit `audit_started` / per-step `node_started`+`tool_started` / `tool_finished` (with the step's
+  input, its finding ids and its wall time) / `node_finished` / `audit_finished`, and get an HTML
+  report at `runs/reports/<run id>.html`. `report.render` dispatches on the arm; both reports are
+  built from `runs/events/*.jsonl` + the KB, never from a model, so `revamp report <id>` rebuilds
+  any past one. Contracts untouched.
+- **Fixed in B14:** the agentic audit never emitted `audit_finished` (the dashboard waited
+  forever, and the run record stayed `running`); Chief Diagnostician's LLM calls were attributed
+  to `node: null`; MCP tool wall time is charged to the parent's `CostLedger` in the tool
+  callbacks, because the tools run in the MCP child process and `evidence_timer` there charges a
+  ledger this process never sees.
 - **Verified live (30 Sep):** all 7 MCP audit tools through a real MCP stdio client (umami:
   123 findings); deterministic audit; Phoenix receiving OTLP spans; dashboard streaming a real
   local-model run.

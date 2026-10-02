@@ -80,6 +80,23 @@ Why a custom dashboard as well as Langfuse: trace UIs show spans, and they do no
 budget ledger, a veto or a handoff rejection is. Our events speak the orchestration's own
 vocabulary. This follows the AG-UI idea: typed run, step and tool events plus state snapshots.
 
+### Audits in the same view
+
+An audit has no `graph` from `describe`, so the page draws one from the audit's own events:
+
+- **Deterministic** (`audit-det`): a chain, `start → seo → pricing → voice → code → performance →
+  accessibility → journeys`. The order is the point, so it is drawn in order. Under each step sits
+  the tool call it made; clicking either shows the input, the findings and the time.
+- **Agentic** (`audit-agentic`): a hub. The Chief Diagnostician is one node, and the tools it could
+  choose from are around it. A tool lights up when called, and each call is a separate row in the
+  inspector (`call 3/8`), so the cap is visible.
+- The KPI row switches from plan-and-client to steps, findings measured, evidence seconds, LLM
+  calls and tokens. For the deterministic audit the LLM card says `0 by design` instead of showing
+  an empty inspector: there is no model in that run, and pretending otherwise would be misleading.
+- The report link appears when `audit_finished` arrives. If that event never arrives the run stays
+  "running" forever, which is exactly what happened before B14 fixed it — the graph lit up and
+  nothing ever closed it.
+
 ## Viva questions
 
 1. Why does one engagement appear as ONE trace even though agents run in parallel?
@@ -88,3 +105,7 @@ vocabulary. This follows the AG-UI idea: typed run, step and tool events plus st
 4. The dashboard shows `handoff → propose (revise ×2)`. What happened, and what stops a third
    time?
 5. Why are events written to JSONL as well as streamed?
+6. The audit's graph is drawn in the browser instead of coming from `describe`. Why is that
+   acceptable, and what would make it not acceptable?
+7. The deterministic audit shows "0 LLM calls". How do you prove to an examiner that this is by
+   design and not a bug?

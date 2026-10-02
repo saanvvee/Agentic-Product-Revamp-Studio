@@ -169,9 +169,13 @@ async def start_audit(request: Request):
         return JSONResponse({"error": "unknown product"}, 400)
     p = load_product(product)
     if body.get("agentic"):
-        # agentic_audit makes its own run id; report it once the first event lands
-        _launch(agentic_audit(p, mode=body.get("mode") or None), f"audit-{product}")
-        return JSONResponse({"run_id": None, "note": "agentic audit started"})
+        # Mint the run id here too, so the client can link the report before the first
+        # event lands instead of waiting for the audit to announce itself.
+        run_id = audit_run_id(product)
+        _launch(agentic_audit(p, max_tool_calls=int(body.get("max_tool_calls") or 8),
+                              mode=body.get("mode") or None, run_id=run_id,
+                              kb=KnowledgeBase(settings.kb_path, "team")), run_id)
+        return JSONResponse({"run_id": run_id, "note": "agentic audit started"})
     run_id = audit_run_id(product)
     steps = tuple(s for s in body.get("steps", STEPS) if s in STEPS)
     _launch(deterministic_audit(p, KnowledgeBase(settings.kb_path, "team"),

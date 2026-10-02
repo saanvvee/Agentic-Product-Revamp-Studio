@@ -457,7 +457,9 @@ function drawGraph(graph) {
   }).run();
   cy.on("tap", "node", (e) => {
     const d = e.target.data();
-    inspect(d.owner ? { type: "agent", node: d.owner, worker: d.worker } : { type: "node", node: d.id });
+    inspect(d.tool ? { type: "tool", tool: d.tool }
+           : d.owner ? { type: "agent", node: d.owner, worker: d.worker }
+           : { type: "node", node: d.id });
   });
 }
 function workerFor(node, agent) {
@@ -531,7 +533,7 @@ function apply(ev, live) {
   } else if (t === "tool_finished" || t === "tool_refused") {
     const open = [...S.tools].reverse().find((x) => x.tool === ev.tool && x.status === "running");
     const st = t === "tool_refused" ? "refused" : "done";
-    if (open) Object.assign(open, { result: ev.result, ms: ev.ms, status: st }); else S.tools.push({ ...ev, status: st });
+    if (open) Object.assign(open, ev, { status: st }); else S.tools.push({ ...ev, status: st });
     if (cy) cy.getElementById(`tool:${ev.tool}`).removeClass("working").addClass("done");
   } else if (t === "proposals") { S.proposals = ev.proposals;
   } else if (t === "plan") { S.plan = ev.plan; Object.assign(S.titles, ev.titles); Object.assign(S.teams, ev.teams);
@@ -550,23 +552,43 @@ function apply(ev, live) {
   } else if (t === "run_finished" || t === "audit_finished") {
     S.status = ev.status === "failed" ? "failed" : "done"; S.finished = ev;
     if (cy) cy.nodes().removeClass("active working");
-    if (t === "run_finished") setLink("#report", `/api/runs/${S.runId}/report`);
+    setLink("#report", `/api/runs/${S.runId}/report`);
     if (live) refreshRuns();
   } else if (t === "run_error") { S.status = "failed"; }
   if (live) render();
 }
 function drawAuditGraph(ev) {
-  const hub = ev.agentic ? "chief_diagnostician" : "audit";
+  S.kind = "audit";
+  if (!ev.agentic) {
+    // A deterministic audit is a fixed sequence, so show it as one: the order is the point,
+    // and each step node owns the single tool call it made.
+    const names = ev.steps || [];
+    const chain = [{ id: "START", workers: [] }, ...names.map((n) => ({ id: n, workers: [] }))];
+    drawGraph({ nodes: chain,
+                edges: chain.slice(1).map((n, i) => ({ source: chain[i].id, target: n.id, route: null })),
+                deterministic: [] });
+    cy.nodes("node.wf").forEach((n) => {
+      if (n.id() === "START") return;
+      cy.add({ data: { id: `tool:${n.id()}`, label: n.data("label"), tool: n.id() }, classes: "worker det",
+               position: { x: n.position("x"), y: n.position("y") + 36 } });
+    });
+    cy.fit(undefined, 30);
+    return;
+  }
+  // The agentic audit has one agent deciding what to measure, so the graph is a hub.
+  const hub = "chief_diagnostician";
   drawGraph({ nodes: [{ id: "START", workers: [] }, { id: hub, workers: [] }],
               edges: [{ source: "START", target: hub, route: null }], deterministic: [] });
-  const names = ev.agentic ? ["audit_seo", "audit_pricing", "audit_user_voice", "audit_code", "audit_performance",
-                               "audit_accessibility", "audit_journeys", "coverage", "list_findings"]
-                           : (ev.steps || []);
+  const names = (ev.tools && ev.tools.length ? ev.tools
+                 : ["audit_seo", "audit_pricing", "audit_user_voice", "audit_code", "audit_performance",
+                    "audit_accessibility", "audit_journeys", "coverage", "list_findings"]);
   const p = cy.getElementById(hub).position();
+  const cols = Math.ceil(Math.sqrt(names.length));
   names.forEach((s, i) => {
-    cy.add({ data: { id: `tool:${s}`, label: s.replace("audit_", "").replaceAll("_", " ") }, classes: "worker det",
-             position: { x: p.x - (names.length - 1) * 50 + i * 100, y: p.y + 120 } });
-    cy.add({ data: { id: `${hub}=>${s}`, source: hub, target: `tool:${s}` }, classes: "link" });
+    cy.add({ data: { id: `tool:${s}`, label: s.replace("audit_", "").replaceAll("_", " "), tool: s },
+             classes: "worker det",
+             position: { x: p.x + (i % cols - (cols - 1) / 2) * 130, y: p.y + 130 + Math.floor(i / cols) * 56 } });
+    cy.add({ data: { id: `${hub}->tool:${s}`, source: hub, target: `tool:${s}` }, classes: "link" });
   });
   cy.fit(undefined, 30);
 }
@@ -581,9 +603,9 @@ function render() {
   $("#statusText").textContent = paused ? "awaiting approval" : S.status;
   const i = S.info;
   $("#crumbs").innerHTML = i.product ? [["product", i.product], i.arm && ["arm", i.arm], i.seed != null && i.arm && ["seed", i.seed],
-      ["models", i.mode || (i.agentic ? "agentic" : "tools only")]].filter(Boolean)
+      ["models", i.arm_description ? "" : (i.mode === "deterministic" ? "none (tools only)" : i.mode === "agentic" ? "agentic over MCP" : i.mode)]].filter(([, v]) => v)
       .map(([k, v]) => `<span class="crumb"><i>${esc(k)}</i>${esc(v)}</span>`).join("") : "";
-  $("#graphsub").textContent = i.arm ? i.arm_description || "" : i.product ? (i.agentic ? "agentic audit over MCP" : "deterministic audit") : "";
+  $("#graphsub").textContent = i.arm ? i.arm_description || "" : i.product ? (i.agentic ? "Chief Diagnostician picks which evidence to gather, over MCP" : "Deterministic audit: every tool, fixed order, no model") : "";
   const now = [];
   if (S.status === "running") {
     if (S.activeNode) now.push(`<span class="chip node"><span class="spin"></span>${esc(S.activeNode.replace("_", " "))}</span>`);
@@ -600,7 +622,7 @@ function renderKpis() {
   const share = p && p.budget_days ? p.total_cost / p.budget_days : 0;
   const nodesDone = Object.keys(S.visits).length;
   const v = S.verdicts.at(-1);
-  const kp = [
+  const kp = isAudit() ? auditKpis(llmCalls, cached) : [
     ["Stage", S.activeNode && S.status === "running" ? S.activeNode.replace("_", " ") : S.status, `${nodesDone} nodes visited`],
     ["Agent calls", S.agents.length, `${Object.keys(S.openAgents).length} in flight`],
     ["LLM calls", `${llmCalls}<small>${cached} cached</small>`, `${Math.round(f ? f.llm_seconds : S.llm.seconds)} s model time`],
@@ -611,6 +633,25 @@ function renderKpis() {
   $("#kpis").innerHTML = kp.map(([k, val, sub, meter], i) => `<div class="panel kpi reveal" style="animation-delay:${i * .03}s">
       <div class="k">${esc(k)}</div><div class="v">${typeof val === "number" ? val : val === esc(val) ? esc(val) : val}</div>
       <div class="sub">${esc(sub)}</div>${meter != null ? `<div class="meter ${meter > 1 ? "over" : ""}"><span style="width:${Math.min(100, meter * 100)}%"></span></div>` : ""}</div>`).join("");
+}
+function isAudit() { return S.kind === "audit" || String(S.info?.arm || "").startsWith("audit"); }
+function auditKpis(llmCalls, cached) {
+  const fin = S.finished || {}, f = fin.cost;
+  const done = S.tools.filter((x) => x.status === "done"), bad = S.tools.filter((x) => x.error).length;
+  const measured = S.tools.reduce((s, x) => s + (x.count || 0), 0);
+  const secs = S.tools.reduce((s, x) => s + (x.ms || 0), 0) / 1000;
+  const evidence = Math.round(f ? f.evidence_seconds : secs);
+  return [
+    ["Stage", S.status === "running" ? (S.info.agentic ? "chief_diagnostician" : S.activeNode || "auditing") : S.status,
+      `${done.length}/${S.tools.length} steps measured${bad ? ` · ${bad} failed` : ""}`],
+    ["Findings measured", measured, fin.findings != null ? `${fin.new} new in this audit` : "measured so far"],
+    ["Evidence time", `${evidence}<small>s</small>`, "wall time inside the audit tools"],
+    ["LLM calls", `${llmCalls}<small>${cached} cached</small>`,
+      S.info.agentic ? `${Math.round(f ? f.llm_seconds : S.llm.seconds)} s of model time` : "0 by design: no model in this audit"],
+    ["Tokens", `${((f ? f.prompt_tokens : S.llm.ptok) / 1000).toFixed(1)}k<small>in</small>`,
+      `${((f ? f.completion_tokens : S.llm.ctok) / 1000).toFixed(1)}k out`],
+    ["Cost split", `${evidence}<small>s evidence</small>`, `${Math.round(f ? f.llm_seconds : S.llm.seconds)} s reasoning (invariant 9)`],
+  ];
 }
 
 // ------------------------------------------------------------------ side: feed + inspector
@@ -633,7 +674,11 @@ function feedLine(ev) {
   else if (t === "approval_requested") { kind = "human"; cls = "k-back"; txt = `approval needed for ${ev.items.length} items`; }
   else if (t === "approval_resolved") { kind = "human"; cls = "k-ok"; txt = `rejected: ${esc(ev.rejected.join(", ") || "nothing")}`; }
   else if (t === "run_started") { kind = "run"; cls = "k-node"; txt = `started · ${esc(ev.product)} ${esc(ev.arm)} seed ${esc(ev.seed)}`; }
-  else if (t === "run_finished" || t === "audit_finished") { kind = "run"; cls = ev.status === "failed" ? "k-bad" : "k-ok"; txt = `finished · ${esc(ev.status || "done")}`; }
+  else if (t === "audit_started") { kind = "run"; cls = ev.agentic ? "k-agent" : "k-tool";
+    txt = `audit started · ${esc(ev.product)} · <b>${esc(ev.agentic ? "agentic, over MCP" : "deterministic, tools only")}</b>`; }
+  else if (t === "audit_error") { kind = "error"; cls = "k-bad"; txt = `audit failed: ${esc(ev.error)}`; }
+  else if (t === "run_finished" || t === "audit_finished") { kind = "run"; cls = ev.status === "failed" ? "k-bad" : "k-ok";
+    txt = `finished · ${esc(ev.status || "done")}${ev.findings != null ? ` · ${ev.findings} findings, ${ev.new} new` : ""}`; }
   else if (t === "note") { txt = esc(ev.text); }
   else return "";
   return `<div class="ev"><span class="ts">${rel(ev.ts)}</span><span class="what"><span class="kind ${cls}">${kind}</span>${txt}</span></div>`;
@@ -655,14 +700,18 @@ function inspect(target) { if (!S) return; S.inspect = target; sideMode = "inspe
 function writeHash() {
   if (!S) return;
   const h = new URLSearchParams({ run: S.runId, tab });
-  if (S.inspect) h.set("inspect", S.inspect.type === "node" ? S.inspect.node : `${S.inspect.node}/${S.inspect.worker}`);
+  if (S.inspect) h.set("inspect", S.inspect.type === "node" ? S.inspect.node
+    : S.inspect.type === "tool" ? `tool:${S.inspect.tool}`
+    : `${S.inspect.node}/${S.inspect.worker}`);
   history.replaceState(null, "", "#" + h.toString());
 }
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   const i = h.get("inspect");
   return { run: h.get("run"), tab: h.get("tab"),
-           inspect: i ? (i.includes("/") ? { type: "agent", node: i.split("/")[0], worker: i.split("/")[1] } : { type: "node", node: i }) : null };
+           inspect: !i ? null : i.startsWith("tool:") ? { type: "tool", tool: i.slice(5) }
+             : i.includes("/") ? { type: "agent", node: i.split("/")[0], worker: i.split("/")[1] }
+             : { type: "node", node: i } };
 }
 function callCard(a, i, prefix) {
   const st = a.status === "running" ? `<span class="badge b-agent">working</span>` : a.status === "error" ? `<span class="badge b-bad">failed</span>` : "";
@@ -674,14 +723,38 @@ function callCard(a, i, prefix) {
 }
 function inspectorHtml() {
   const t = S.inspect;
-  if (!t) return `<p class="muted">Click a workflow node or an agent in the graph to see what it did.</p>`;
+  if (!t) return `<p class="muted">Click a workflow node, an agent or a tool in the graph to see what it did.</p>`;
+  if (t.type === "tool") {
+    // An audit's step node owns one tool call, and the agentic hub owns several calls of
+    // the same tool. Show every one, so "what did this step actually measure" is answerable.
+    const calls = S.tools.filter((x) => x.tool === t.tool);
+    const bad = calls.some((x) => x.error);
+    return `<h4>${esc(t.tool.replaceAll("_", " "))}</h4>
+      <p class="muted" style="margin:0">${bad ? "This step failed; the audit kept going." : "Evidence tool. Deterministic code, no model in the loop."}</p>
+      ${calls.length ? calls.map((c, i) => `<details class="call" data-k="ins${i}"><summary><span class="l">
+          <b>call ${c.call ? `${c.call}/${c.cap}` : 1}</b>
+          <span class="badge ${c.status === "refused" || c.error ? "b-bad" : c.status === "running" ? "b-agent" : "b-ok"}">${esc(c.status)}</span></span>
+          <span class="r">${secs(c.ms)}${c.count != null ? ` · ${c.count} findings` : ""}</span></summary>
+        <div class="io">${c.args ? `<div><h5>Arguments</h5><pre>${fmtJSON(c.args)}</pre></div>` : ""}
+          <div><h5>${c.error ? "Error" : "Result"}</h5><pre>${esc(c.error || c.result || "")}</pre></div>
+          ${c.finding_ids && c.finding_ids.length ? `<div><h5>Finding ids</h5><pre>${esc(c.finding_ids.join(" "))}</pre></div>` : ""}
+        </div></details>`).join("")
+      : `<p class="muted" style="margin-top:12px">Not called in this run.</p>`}`;
+  }
   if (t.type === "node") {
     const calls = S.agents.filter((a) => a.node === t.node);
+    const toolCalls = S.tools.filter((x) => x.node === t.node || x.tool === t.node);
     const routes = (S.routes[t.node] || []).filter(Boolean);
     return `<h4>${esc(t.node.replace("_", " "))}</h4><p class="muted" style="margin:0">${esc(NODE_INFO[t.node] || "")}</p>
       <dl class="kv"><dt>Visits</dt><dd>${S.visits[t.node] || 0}</dd><dt>Time in node</dt><dd>${secs(S.nodeMs[t.node])}</dd>
       <dt>Routes taken</dt><dd>${routes.length ? routes.map((r) => `<span class="badge ${BACK.has(r) ? "b-bad" : "b-acc"}">${esc(r)}</span>`).join(" ") : "—"}</dd></dl>
-      ${calls.length ? `<div class="section-t">Agent calls</div>${calls.map((a, i) => callCard(a, i, "in")).join("")}` : `<p class="muted">No LLM calls in this node.</p>`}`;
+      ${calls.length ? `<div class="section-t">Agent calls</div>${calls.map((a, i) => callCard(a, i, "in")).join("")}` : ""}
+      ${toolCalls.length ? `<div class="section-t">Evidence it measured</div>${toolCalls.map((c, i) => `<div class="call"><summary><span class="l">
+          <b>${esc(c.tool)}</b><span class="badge ${c.error ? "b-bad" : "b-ok"}">${c.error ? "failed" : `${c.count ?? 0} findings`}</span></span>
+          <span class="r">${secs(c.ms)}</span></summary>
+          <div class="io">${c.args ? `<div><h5>Arguments</h5><pre>${fmtJSON(c.args)}</pre></div>` : ""}
+            <div><h5>Result</h5><pre>${esc(c.result || "")}</pre></div></div></div>`).join("")}` : ""}
+      ${!calls.length && !toolCalls.length ? `<p class="muted">No LLM calls and no tool calls in this node.</p>` : ""}`;
   }
   const names = workerAgentNames(t.node, t.worker);
   const calls = S.agents.filter((a) => a.node === t.node && names.has(a.agent));
@@ -805,7 +878,10 @@ function paneEvidence() {
 }
 function paneCost() {
   const f = S.finished?.cost;
-  const llmS = f ? f.llm_seconds : S.llm.seconds, evS = f ? f.evidence_seconds : 0, top = Math.max(1, llmS, evS);
+  const llmS = f ? f.llm_seconds : S.llm.seconds;
+  // While an audit runs there is no final ledger yet, so add up what the tools reported.
+  const evS = f ? f.evidence_seconds : S.tools.reduce((s, x) => s + (x.ms || 0), 0) / 1000;
+  const top = Math.max(1, llmS, evS);
   const per = Object.entries(S.agents.reduce((m, a) => { (m[a.agent] ??= { n: 0, ms: 0 }); m[a.agent].n++; m[a.agent].ms += a.ms || 0; return m; }, {}))
     .sort((a, b) => b[1].ms - a[1].ms);
   const maxMs = Math.max(1, ...per.map(([, v]) => v.ms));

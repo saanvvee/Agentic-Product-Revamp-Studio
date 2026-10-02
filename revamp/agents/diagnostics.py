@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
@@ -22,6 +23,7 @@ from mcp import StdioServerParameters
 from revamp import observe
 from revamp.agents.factory import make_agent
 from revamp.agents.schemas import DiagnosisReport
+from revamp.llm.cache import current_ledger
 from revamp.settings import settings
 
 INSTRUCTION = """
@@ -34,6 +36,11 @@ using the audit tools, then report. Each audit costs time, so choose deliberatel
    tools refuse further calls.
 Then answer with a short summary, the most important finding ids, and any remaining gaps.
 """
+
+# Tool name -> when it started. The before and after callbacks are separate closures,
+# and the tool runs in another process, so this is the only place the two halves can
+# meet. One audit runs at a time, so a plain dict keyed by tool name is enough.
+_STARTED: dict[str, float] = {}
 
 
 def mcp_toolset(product: str, role: str = "team") -> McpToolset:
@@ -60,7 +67,9 @@ def tool_call_cap(max_calls: int):
 
     def cb(tool, args, tool_context):
         state["n"] += 1
+        _STARTED[tool.name] = time.perf_counter()
         if state["n"] > max_calls:
+            _STARTED.pop(tool.name, None)
             observe.emit("tool_refused", tool=tool.name, agent="chief_diagnostician",
                          call=state["n"], cap=max_calls)
             return {"error": f"tool budget exhausted ({max_calls} calls). Write your report now."}
@@ -74,10 +83,19 @@ def tool_call_cap(max_calls: int):
 
 def report_tool_result(tool, args, tool_context, tool_response):
     """after_tool_callback: stream each MCP result to the dashboard; returning None
-    keeps the tool's response unchanged."""
+    keeps the tool's response unchanged.
+
+    It also books the tool's wall time to the evidence ledger. The audit itself runs in
+    the MCP child process, where `evidence_timer` charges a ledger this process never
+    sees, so without this an agentic audit would report zero evidence cost (invariant 9).
+    """
     text = str(tool_response)
+    ms = round((time.perf_counter() - _STARTED.pop(tool.name, time.perf_counter())) * 1000)
+    ledger = current_ledger.get()
+    if ledger is not None:
+        ledger.evidence_seconds += ms / 1000
     observe.emit("tool_finished", tool=tool.name, agent="chief_diagnostician",
-                 result=text[:1500])
+                 result=text[:1500], ms=ms)
     return None
 
 

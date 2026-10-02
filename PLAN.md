@@ -154,6 +154,7 @@ Each step ends runnable and tested. Tick when merged to `main`.
 - [x] **B11 Evaluation (M11):** arm runner A0–A6, metrics in code, answer-key scorer, results tables
 - [x] **B12 Dashboard (M12):** static HTML report per run (conflict register, budget ledger, plan, trace link)
 - [x] **B13 Walkthroughs:** `docs/walkthrough/<module>.md` per module, with viva questions
+- [x] **B14 Audit as a run:** `RunRecord` for both audit arms (`audit-det`, `audit-agentic`), per-step events with the step's input and its finding ids, `audit_finished` so the dashboard stops waiting, an HTML report per audit that rebuilds from `runs/events` + KB, audit-specific graph/KPIs in Mission Control, and the tool wall time booked to the parent's evidence ledger (invariant 9 for MCP tools). `revamp/contracts.py` untouched.
 
 ---
 
