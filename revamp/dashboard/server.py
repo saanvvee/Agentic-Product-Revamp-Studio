@@ -122,6 +122,14 @@ def _launch(coro, run_id: str) -> None:
             await coro
         except Exception:  # the run's own events already carry the error
             log.exception("run %s failed", run_id)
+        # The CLI writes the HTML report itself after a run; the dashboard only served one
+        # on demand, so anything started here left no file to open or read afterwards.
+        # Report.render is sync and reads from disk, so keep it off the event loop.
+        try:
+            path = await asyncio.to_thread(report.write, run_id)
+            log.info("report for %s: %s", run_id, path)
+        except Exception:
+            log.exception("could not write the report for %s", run_id)
     State.task = asyncio.create_task(wrapped())
     State.task_run_id = run_id
 

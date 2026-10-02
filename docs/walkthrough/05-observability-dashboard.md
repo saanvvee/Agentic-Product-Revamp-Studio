@@ -76,6 +76,23 @@ Choosing a backend on this laptop:
 - **Libraries:** Cytoscape.js and dagre are vendored in `static/vendor/`, so the demo works
   offline.
 
+### The rail is the runbook: audit first, then engage
+
+The left column is two numbered steps over one shared product selector, because the order is not a
+convention, it is a gate:
+
+1. **Audit the product** (deterministic or agentic). The line under the title is the gate state:
+   findings in the KB, or `not audited yet — step 2 is blocked`.
+2. **Run the engagement** (arm, seed, models, human approval). Its button is `disabled` until step 1
+   has findings.
+
+The dashboard is not the enforcement point; it is a readout. `workflow/nodes.py::init` rejects an
+engagement whose product has no findings with `no findings, run the audit first`, so the disabled
+button is a promise the workflow keeps even if you POST to `/api/runs` yourself. Both steps read the
+same product: switching the selector re-reads the KB, re-renders both gates and rewrites the CLI
+commands shown at the bottom of the runbook. Constraints load before an audit
+(`python -m revamp constraints <product>`), and once per product, not once per run.
+
 Why a custom dashboard as well as Langfuse: trace UIs show spans, and they do not know what a
 budget ledger, a veto or a handoff rejection is. Our events speak the orchestration's own
 vocabulary. This follows the AG-UI idea: typed run, step and tool events plus state snapshots.
@@ -96,6 +113,17 @@ An audit has no `graph` from `describe`, so the page draws one from the audit's 
 - The report link appears when `audit_finished` arrives. If that event never arrives the run stays
   "running" forever, which is exactly what happened before B14 fixed it — the graph lit up and
   nothing ever closed it.
+- **Every run leaves a file.** The CLI has always written `runs/reports/<run id>.html` itself; the
+  dashboard used to serve one only on demand, so an audit started from Mission Control left nothing
+  on disk to open afterwards. `_launch` now writes the file when the run ends, off the event loop
+  with `asyncio.to_thread`, and logs the path.
+- `python -m revamp report <run id>` rebuilds any report from `runs/events/*.jsonl` plus the KB
+  (`--open` opens it in a browser). Audits only started writing a `RunRecord` to the KB in B14, so
+  for the older ones `report.render` reads a record back out of the events instead of refusing —
+  otherwise the dashboard's report link 404'd on every pre-B14 run.
+- `python -m revamp findings <product> --full` lists every finding (id, severity, category, title,
+  metric, tool, locator) instead of only the coverage counts, for when you want the evidence on the
+  terminal rather than in the report.
 
 ## Viva questions
 
@@ -109,3 +137,9 @@ An audit has no `graph` from `describe`, so the page draws one from the audit's 
    acceptable, and what would make it not acceptable?
 7. The deterministic audit shows "0 LLM calls". How do you prove to an examiner that this is by
    design and not a bug?
+8. The dashboard disables "Run engagement" when a product has no findings. What stops someone from
+   bypassing it, and why is the disabled button not the real enforcement?
+9. Both steps share one product selector. What breaks if the audit used a different product from
+   the engagement?
+10. A report can be rebuilt without a model. What does that guarantee, and what does it not stop
+    the report from getting wrong?

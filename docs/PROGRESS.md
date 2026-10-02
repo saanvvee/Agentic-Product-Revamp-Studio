@@ -282,7 +282,7 @@ All fourteen planned build steps are done, plus observability.
 
 ### What has been checked
 
-- **64 automated tests pass** (last run 2 Oct 2026, about 17 seconds), including 6 that drive a
+- **68 automated tests pass** (last run 3 Oct 2026, about 18 seconds), including 6 that drive a
   whole audit end to end with scripted tools. They run offline: agents are replaced by scripted
   fake models, so the tests check the orchestration itself (routing, loop caps, provenance, veto,
   all arms, human approval, the real A2A connection) independently of how good the model is.

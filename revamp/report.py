@@ -57,11 +57,38 @@ def _e(x) -> str:
     return html.escape(str(x))
 
 
+def _audit_record_from_events(run_id: str):
+    """Rebuild a RunRecord for an audit that never wrote one.
+
+    Audits only started writing a record to the knowledge base in B14. The older ones still
+    have their events on disk, and the docstring promise is that any past run's report can be
+    rebuilt, so read the record back out of the events instead of refusing. Audits only: an
+    engagement has always written a record, and its report needs plan data this cannot invent.
+    """
+    from revamp.audit import ARM_AGENTIC, ARM_DET
+    from revamp.contracts import CostLedger, RunRecord
+
+    events = observe.load_events(run_id)
+    started = next((e for e in events if e["type"] == "audit_started"), None)
+    if started is None or not started.get("product"):
+        return None
+    finished = next((e for e in reversed(events) if e["type"] == "audit_finished"), {})
+    # `agentic` is absent on a deterministic audit; there is no LLM cost to put in the ledger.
+    return RunRecord(
+        run_id=run_id,
+        product=started["product"],
+        arm=ARM_AGENTIC if started.get("agentic") else ARM_DET,
+        seed=0,
+        status="done" if finished else "running",
+        cost=CostLedger(evidence_seconds=float(finished.get("evidence_seconds") or 0.0)),
+    )
+
+
 def render(run_id: str, kb_path: Path | None = None) -> str:
     """One entry point for both kinds of run: an engagement, or an audit."""
     from revamp.audit import is_audit  # local: audit.py imports the whole tool stack
     kb = KnowledgeBase(kb_path or settings.kb_path, "team")  # team-visible data only
-    rec = kb.run(run_id)
+    rec = kb.run(run_id) or _audit_record_from_events(run_id)
     if rec is None:
         raise ValueError(f"no run {run_id}")
     if is_audit(rec.arm):

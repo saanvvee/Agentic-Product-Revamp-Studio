@@ -74,13 +74,16 @@ public APIs. The campus network's TLS inspection blocks PyPI; install from anoth
 .venv\Scripts\python.exe -m revamp run umami --arm A2     # one engagement -> runs\reports\<id>.html
 .venv\Scripts\python.exe -m revamp run umami --hitl       # pause for human approval
 .venv\Scripts\python.exe -m revamp report <run id>       # rebuild any past report, no tools, no model
+.venv\Scripts\python.exe -m revamp report <run id> --open  # ... and open it in the browser
+.venv\Scripts\python.exe -m revamp findings umami --full  # every finding, not just the counts
 .venv\Scripts\python.exe -m revamp eval umami --arms A0,A1,A2 --seeds 0,1,2
 ```
 
 An audit is a run, so it has a run record, a trace, events and a report of its own at
 `runs/reports/audit-<product>-<stamp>.html`: one row per step with the input it was given, the
 findings it measured and their provenance, the cumulative coverage, and the evidence/orchestration
-cost split.
+cost split. Reports are plain HTML with no dependencies, so they open from disk. Every run started
+from the CLI **or** from Mission Control leaves that file behind.
 
 ## Watch it run
 

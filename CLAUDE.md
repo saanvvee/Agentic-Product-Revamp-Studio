@@ -83,7 +83,7 @@ and modify any part in the viva, so:
 ## Current status (2 Oct 2026)
 
 - **Built:** B0-B14 plus observability (`revamp/observe.py`, `revamp/tracing.py`) and the
-  Mission Control dashboard (`python -m revamp.dashboard`). 64 offline tests pass.
+  Mission Control dashboard (`python -m revamp.dashboard`). 68 offline tests pass.
 - **B14 (2 Oct):** an audit is a run. Both arms write a `RunRecord` (`audit-det`, `audit-agentic`),
   emit `audit_started` / per-step `node_started`+`tool_started` / `tool_finished` (with the step's
   input, its finding ids and its wall time) / `node_finished` / `audit_finished`, and get an HTML

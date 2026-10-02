@@ -97,7 +97,10 @@ h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; }
 .iconbtn[hidden] { display: none; }
 
 /* ------------------------------------------------------------------ shell */
-.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 16px 20px 28px; }
+/* 340px, not 300px: the runbook carries real explanatory text and the model selects are wide.
+   A narrower rail wraps every sentence onto one more line, which makes the sticky rail taller
+   than the viewport instead of shorter. */
+.shell { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px 20px 28px; }
 @media (max-width: 1100px) { .shell { grid-template-columns: 1fr; } }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .panel-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); min-height: 48px; }
@@ -106,13 +109,20 @@ h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* ------------------------------------------------------------------ rail */
-.rail { display: grid; gap: 16px; align-content: start; position: sticky; top: 76px; max-height: calc(100vh - 92px); }
-@media (max-width: 1100px) { .rail { position: static; max-height: none; } }
+/* the rail scrolls itself: the runbook is taller than a short viewport, and a sticky rail
+   cannot be reached by page scroll, so the overflow has to live here. */
+.rail { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 76px;
+  max-height: calc(100vh - 92px); min-height: 0; min-width: 0; overflow-y: auto; scrollbar-gutter: stable; }
+/* the column is 300px, but a select's min-content width is its longest option, so the rail's
+   children must be allowed to shrink or they push past the track and scroll sideways. */
+.rail > .runbook { flex: 0 0 auto; min-width: 0; }
+.rail > * { min-width: 0; }
+@media (max-width: 1100px) { .rail { position: static; max-height: none; overflow-y: visible; } }
 .form { display: grid; gap: 12px; padding: 14px 16px 16px; }
 .field { display: grid; gap: 5px; }
 .field label { font-size: 12px; color: var(--mute); font-weight: 500; }
 .field select, .field input { height: 36px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--line-2);
-  background: var(--panel-2); outline: none; }
+  background: var(--panel-2); outline: none; width: 100%; min-width: 0; }
 .field select:focus, .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .armdesc { font-size: 12px; color: var(--mute); margin-top: -4px; min-height: 18px; }
@@ -132,11 +142,36 @@ h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .btn.primary { color: #fff; } }
 :root[data-theme="light"] .btn.primary { color: #fff; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
-.history { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+/* the rail is the runbook: audit first, then engage. each step states its own gate. */
+.steps { display: grid; gap: 10px; padding: 14px 16px 16px; }
+.step { display: grid; gap: 8px; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2); }
+.step.locked { border-style: dashed; }
+.step > .head { display: flex; align-items: center; gap: 9px; }
+.step .n { display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; flex: none;
+  border-radius: 999px; background: var(--line-2); color: var(--ink-2); font-size: 11.5px; font-weight: 700; font-family: var(--mono); }
+.step.ready .n { background: var(--ok); color: #fff; }
+:root[data-theme="dark"] .step.ready .n { color: #0d2417; }
+.step > .head b { font-size: 13.5px; }
+.step .gate { font-size: 12px; line-height: 1.45; color: var(--mute); }
+.step .gate b { color: var(--ink); font-weight: 600; }
+.step .gate.ok b { color: var(--ok); }
+.step .gate.wait b { color: var(--agent); }
+.step .why { font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+.step .field, .step .row2, .step .switch, .step .armdesc, .step .form { padding: 0; }
+.step .btn { width: 100%; }
+.step.pulse { animation: nudge 1.5s ease-in-out infinite; }
+@keyframes nudge { 50% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } }
+.whyline { font-size: 11.5px; line-height: 1.5; color: var(--mute); margin: -4px 0 2px; }
+.whyline + .whyline { margin-top: 8px; }
+.whyline code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
+  overflow-wrap: anywhere; }
+.history { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 140px; overflow: hidden; }
 .seg { display: inline-flex; margin-left: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
 .seg button { border: 0; background: none; padding: 3px 9px; font-size: 12px; border-radius: 6px; cursor: pointer; color: var(--mute); }
 .seg button.on { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
-.runlist { list-style: none; margin: 0; padding: 6px; overflow: auto; }
+.runlist { list-style: none; margin: 0; padding: 6px; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .runlist li { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; padding: 9px 10px;
   border-radius: 9px; cursor: pointer; }
 .runlist li:hover { background: var(--panel-2); }
@@ -289,21 +324,42 @@ dialog::backdrop { background: rgba(10,12,14,.45); backdrop-filter: blur(2px); }
 
 <div class="shell">
   <aside class="rail">
-    <section class="panel reveal">
-      <div class="panel-h"><h3>New run</h3></div>
-      <div class="form">
-        <div class="field"><label for="product">Product</label><select id="product"></select></div>
-        <div class="field"><label for="arm">Evaluation arm</label><select id="arm"></select></div>
-        <div class="armdesc" id="armdesc"></div>
-        <div class="row2">
-          <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="0" min="0"></div>
-          <div class="field"><label for="mode">Models</label><select id="mode"></select></div>
+    <section class="panel runbook reveal">
+      <div class="panel-h"><h3>Runbook</h3><span class="muted" id="stepproduct" style="font-size:12px;margin-left:auto"></span></div>
+      <div class="steps">
+        <div class="field"><label for="product">Product (both steps)</label><select id="product"></select></div>
+        <!-- 1. Evidence. The engagement reads its findings from the knowledge base, so
+             this is a gate, not an optional extra. -->
+        <div class="step" id="stepAudit">
+          <div class="head"><span class="n">1</span><b>Audit the product</b></div>
+          <div class="gate" id="auditGate">checking the knowledge base…</div>
+          <div class="why">Measures the live product with every audit tool and stores the
+            findings. No model, no cost, and it is reusable: one audit feeds every run below.</div>
+          <div class="field"><label for="auditMode">How</label><select id="auditMode">
+            <option value="det">Deterministic: every tool, fixed order</option>
+            <option value="agentic">Agentic: Chief Diagnostician picks</option>
+          </select></div>
+          <button class="btn" id="audit">Run the audit</button>
         </div>
-        <label class="switch">Pause for human approval<input id="hitl" type="checkbox"></label>
-        <div class="btns">
+        <!-- 2. The engagement itself. Disabled until step 1 has findings to work from. -->
+        <div class="step locked" id="stepRun">
+          <div class="head"><span class="n">2</span><b>Run the engagement</b></div>
+          <div class="gate" id="runGate">waiting for evidence</div>
+          <div class="form">
+            <div class="field"><label for="arm">Evaluation arm</label><select id="arm"></select></div>
+            <div class="armdesc" id="armdesc"></div>
+            <div class="row2">
+              <div class="field"><label for="seed">Seed</label><input id="seed" type="number" value="0" min="0"></div>
+              <div class="field"><label for="mode">Models</label><select id="mode"></select></div>
+            </div>
+            <label class="switch">Pause for human approval<input id="hitl" type="checkbox"></label>
+          </div>
           <button class="btn primary" id="go">Run engagement</button>
-          <button class="btn" id="audit" title="Gather evidence for the product with every audit tool">Audit</button>
         </div>
+        <p class="whyline">Order matters: with an empty knowledge base an engagement stops at
+          <code>init</code> with <i>no findings, run the audit first</i>. The CLI is the same order,
+          <code id="cliAudit">python -m revamp audit &lt;product&gt;</code> then
+          <code id="cliConstraints">python -m revamp constraints &lt;product&gt;</code> once.</p>
       </div>
     </section>
     <section class="panel history reveal" style="animation-delay:.05s">
@@ -553,6 +609,8 @@ function apply(ev, live) {
     S.status = ev.status === "failed" ? "failed" : "done"; S.finished = ev;
     if (cy) cy.nodes().removeClass("active working");
     setLink("#report", `/api/runs/${S.runId}/report`);
+    // An audit changes what the engagement can do, so the rail's gate must re-read the KB.
+    if (t === "audit_finished" && S.info?.product) loadEvidence(S.info.product, true);
     if (live) refreshRuns();
   } else if (t === "run_error") { S.status = "failed"; }
   if (live) render();
@@ -597,6 +655,7 @@ function setLink(sel, url) { const a = $(sel); if (url) { a.href = url; a.hidden
 // ------------------------------------------------------------------ render
 const rel = (ts) => S && S.t0 ? `+${(ts - S.t0).toFixed(ts - S.t0 < 100 ? 1 : 0)}s` : "";
 function render() {
+  renderGates();
   if (!S) return;
   const paused = S.pendingApproval && S.status === "running";
   $("#status").className = `status ${paused ? "paused" : S.status}`;
@@ -910,7 +969,11 @@ function renderRuns() {
         <div class="s">${r.kind === "audit" ? "evidence" : `seed ${esc(r.seed)}`} · ${esc(r.status)}</div></span>
       <span class="when">${ago(r.started)}</span></li>`).join("") : `<li class="empty">No runs yet.</li>`;
 }
-async function refreshRuns() { runsCache = await (await fetch("/api/runs")).json(); renderRuns(); }
+async function refreshRuns() {
+  runsCache = await (await fetch("/api/runs")).json();
+  renderRuns();
+  renderGates();   // the last audit of each product is shown in the step 1 gate
+}
 async function select(runId, speed = 0) {
   clearInterval(replayTimer);
   selected = runId; S = fresh(runId);
@@ -933,6 +996,67 @@ function connect() {
   };
 }
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 3500); }
+
+/* ------------------------------------------------------- the rail's two gates */
+// An engagement reads its findings from the knowledge base, so "has this product been
+// audited" is a real precondition, not a hint. The rail states it instead of letting
+// someone discover it as a failed run.
+const kbEvidence = {};   // product -> { n, cats, last } | null = not loaded yet
+function coverageCats(cov) { return Object.entries(cov || {}).map(([c, s]) =>
+  [c.replace(/_/g, " "), Object.values(s).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]); }
+async function loadEvidence(product, force) {
+  if (!force && kbEvidence[product]) return kbEvidence[product];
+  try {
+    const r = await fetch(`/api/findings/${product}`);
+    if (!r.ok) throw new Error(r.statusText);
+    const j = await r.json();
+    evidenceCache[product] = j;   // the Evidence tab reads the same payload
+    // /api/runs is newest-first but sort anyway: "last audit" must be the newest one, and
+    // the field is `started` (epoch seconds), not `when`.
+    const last = runsCache.filter((x) => x.product === product && x.kind === "audit")
+      .sort((a, b) => (b.started || 0) - (a.started || 0))[0];
+    kbEvidence[product] = { n: j.findings.length, cats: coverageCats(j.coverage),
+                            last: last ? { when: ago(last.started), status: last.status } : null };
+  } catch (e) {
+    kbEvidence[product] = { n: 0, cats: [], last: null, error: String(e.message || e) };
+  }
+  renderGates();
+  return kbEvidence[product];
+}
+function renderGates() {
+  const p = $("#product")?.value;
+  const ev = p ? kbEvidence[p] : null;
+  const auditing = !!(S && S.kind === "audit" && S.info?.product === p && S.status === "running");
+  const stepA = $("#stepAudit"), stepR = $("#stepRun");
+  if (stepA) {
+    stepA.classList.toggle("pulse", !ev?.n && !auditing);
+    const top = ev?.cats?.[0];
+    $("#auditGate").className = `gate ${ev?.n ? "ok" : auditing ? "wait" : ""}`;
+    $("#auditGate").innerHTML = !ev ? "checking the knowledge base…"
+      : auditing ? "<b>Audit running…</b> every tool in order, watch the graph"
+      : ev.n ? `<b>${ev.n} findings</b> in the knowledge base${top ? `, most from ${esc(top[0])} (${top[1]})` : ""}`
+              + (ev.last ? `<br><span class=muted>last audit ${ev.last.when === "now" ? "just now" : esc(ev.last.when) + " ago"}, ${esc(ev.last.status || "")}</span>` : "")
+      : "not audited yet — <b>step 2 is blocked</b>";
+    $("#audit").textContent = ev?.n ? "Re-run the audit" : "Run the audit";
+  }
+  if (stepR) {
+    const ready = !!ev?.n;
+    stepR.classList.toggle("ready", ready);
+    stepR.classList.toggle("locked", !ready);
+    $("#go").disabled = !ready || auditing;
+    $("#runGate").className = `gate ${ready ? "ok" : "wait"}`;
+    $("#runGate").innerHTML = ready
+      ? "reads the evidence above, then arbitrates and negotiates"
+      : auditing ? "waiting for the audit to finish…"
+      : "blocked: no findings for this product yet";
+  }
+  if (stepA && p) {
+    $("#stepproduct").textContent = p;
+    const cli = (sel, cmd) => { const el = $(sel); if (el) el.textContent = cmd; };
+    cli("#cliAudit", `python -m revamp audit ${p}`);
+    cli("#cliConstraints", `python -m revamp constraints ${p}`);
+  }
+}
 function openApproval(ev) {
   $("#approvalItems").innerHTML = ev.items.map((it) => `<label><input type="checkbox" value="${esc(it.id)}">
     <span><span class="tag id">${esc(it.id)}</span> <b>${esc(it.title)}</b><div class="muted">${it.cost_days} engineer-days · risk ${esc(it.risk)}</div></span></label>`).join("");
@@ -949,9 +1073,17 @@ async function post(url, body) {
   if (!r.ok) toast(j.error || "Request failed");
   return j;
 }
+$("#product").onchange = () => loadEvidence($("#product").value, true);
 $("#go").onclick = () => post("/api/runs", { product: $("#product").value, arm: $("#arm").value, seed: +$("#seed").value,
                                              mode: $("#mode").value, hitl: $("#hitl").checked });
-$("#audit").onclick = () => post("/api/audit", { product: $("#product").value }).then((j) => j.run_id && toast("Audit started"));
+$("#audit").onclick = () => {
+  const agentic = $("#auditMode").value === "agentic";
+  toast(agentic ? "Agentic audit starting: the Chief Diagnostician picks the tools." : "Audit starting: every tool, fixed order.");
+  post("/api/audit", { product: $("#product").value, agentic }).then((j) => {
+    if (j.run_id) { select(j.run_id); toast("Audit started."); }
+    else if (j.note) toast(j.note);
+  });
+};
 $("#replay").onclick = () => selected && select(selected, 160);
 $("#fit").onclick = () => cy && cy.fit(undefined, 22);
 $("#runlist").onclick = (e) => { const li = e.target.closest("li[data-id]"); if (li) select(li.dataset.id); };
@@ -977,6 +1109,8 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => cy &
   $("#arm").innerHTML = meta.arms.map((a) => `<option value="${esc(a.name)}" ${a.name === "A2" ? "selected" : ""}>${esc(a.name)}</option>`).join("");
   $("#arm").onchange();
   $("#mode").innerHTML = meta.modes.map((m) => `<option ${m === meta.default_mode ? "selected" : ""}>${esc(m)}</option>`).join("");
+  $("#product").onchange();
+  await loadEvidence($("#product").value);
   await refreshRuns();
   connect();
   const first = runsCache.find((r) => r.kind === "engagement") || runsCache[0];

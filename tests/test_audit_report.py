@@ -125,6 +125,75 @@ def test_dashboard_launches_an_audit_and_serves_its_report(scripted_audit):
         assert {r["run_id"] for r in client.get("/api/runs").json()} >= {run_id}
 
 
+def test_dashboard_started_audit_leaves_a_report_file_on_disk(scripted_audit):
+    """Regression: the CLI wrote runs/reports/<id>.html itself, but an audit started from
+    Mission Control only served one on demand, so the demo had no file to open."""
+    import time
+
+    from starlette.testclient import TestClient
+
+    from revamp.dashboard.server import app
+    from revamp.settings import settings
+
+    with TestClient(app) as client:
+        started = client.post("/api/audit", json={"product": PRODUCT, "steps": ["seo"]})
+        run_id = started.json()["run_id"]
+        path = settings.runs_dir / "reports" / f"{run_id}.html"
+        deadline = time.time() + 30
+        while time.time() < deadline and not path.is_file():
+            time.sleep(0.05)
+        assert path.is_file(), f"no report file for {run_id}"
+        assert "Audit: umami" in path.read_text(encoding="utf-8")
+
+
+def test_findings_full_lists_the_evidence_not_only_the_counts(scripted_audit):
+    """`findings` printed severity counts, which is not something you can read a report from."""
+    from revamp.cli import findings_lines
+
+    run_det(scripted_audit, steps=("seo",))
+    fs = KnowledgeBase(scripted_audit, "team").findings(PRODUCT)
+    text = "\n".join(findings_lines(fs, full=True))
+    assert text.count("total") == 1
+    for f in fs:
+        assert f"{f.id}  {f.severity:8} {f.category:14} {f.title}" in text
+    assert "total" in findings_lines(fs, full=False)[-1]  # counts stay the default
+
+
+def test_a_pre_b14_audit_rebuilds_from_its_events(scripted_audit, monkeypatch):
+    """Audits only started writing a RunRecord to the KB in B14. The older ones still have
+    their events, and 'any past run's report can be rebuilt' is a promise we should keep."""
+    from revamp.kb import KnowledgeBase
+
+    run_id = run_det(scripted_audit, steps=("seo",))["run_id"]
+    assert KnowledgeBase(scripted_audit, "team").run(run_id) is not None
+
+    # pretend the KB has no record for it, as if the audit had run before B14 wrote one
+    keep = KnowledgeBase.run
+
+    def only_this_run(self, rid):
+        return None if rid == run_id else keep(self, rid)
+
+    monkeypatch.setattr(KnowledgeBase, "run", only_this_run)
+    page = report.write(run_id, scripted_audit).read_text(encoding="utf-8")
+    assert "Audit: umami" in page  # rebuilt from the events, not refused
+
+
+def test_rail_states_the_order_and_gates_on_evidence(scripted_audit):
+    """An engagement cannot run without findings, so the rail says so instead of letting
+    someone discover it as a failed run."""
+    from starlette.testclient import TestClient
+
+    from revamp.dashboard.server import app
+
+    with TestClient(app) as client:
+        page = client.get("/").text
+        for i in ("stepAudit", "auditGate", "runGate", "auditMode", "go", "audit"):
+            assert f'id="{i}"' in page
+        assert page.index("Run the audit") < page.index("Run engagement")  # audit is step 1
+        assert client.get("/api/findings/umami").json()["findings"]      # audited: step 2 open
+        assert client.get("/api/findings/plane").json()["findings"] == []  # never audited: blocked
+
+
 def test_agentic_tool_time_is_booked_to_the_evidence_ledger():
     """The MCP tools run in a child process, so the parent's ledger needs the time from
     the tool callbacks, or an agentic audit would report zero evidence cost."""

@@ -5,12 +5,12 @@
   products                         list configured products
   audit <product> [--agentic]      gather evidence into the KB (no LLM unless --agentic)
   constraints <product>            load the product's private client constraints
-  findings <product>               evidence coverage table
+  findings <product> [--full]       evidence coverage table (--full: every finding)
   run <product> [--arm A2] [--seed 0] [--hitl]
                                    one engagement; writes an HTML report
   eval <product...> [--arms A0,A1,A2] [--seeds 0,1,2]
                                    run arms x seeds, write results tables
-  report <run_id>                  (re)build a run's HTML report
+  report <run_id> [--open]         (re)build a run's HTML report (--open: in a browser)
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import sys
+import webbrowser
 
 from revamp import evidence, report, tracing
 from revamp.kb import KnowledgeBase
@@ -98,11 +99,29 @@ def cmd_constraints(a) -> None:
     print(f"{len(cs)} private constraints loaded for {a.product} (client namespace)")
 
 
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+
+def findings_lines(fs, full: bool) -> list[str]:
+    """Coverage counts, plus every finding when asked. The audit's HTML report is the
+    readable artifact; this is the same evidence on the terminal, for grepping."""
+    lines = [f"{c:14} {s}" for c, s in evidence.coverage(fs).items()]
+    lines.append(f"total {len(fs)}")
+    if not full:
+        return lines
+    lines.append("")
+    for f in sorted(fs, key=lambda f: (SEVERITY_RANK.get(f.severity, 9), f.category, f.id)):
+        lines.append(f"{f.id}  {f.severity:8} {f.category:14} {f.title}")
+        if f.metric:
+            lines.append(f"{'':11}{f.evidence.tool:16} {f.metric}={f.value}"
+                         + (f" {f.unit}" if f.unit else ""))
+        if f.evidence.locator:
+            lines.append(f"{'':11}{f.evidence.locator}")
+    return lines
+
+
 def cmd_findings(a) -> None:
-    fs = _kb("team").findings(a.product)
-    for c, s in evidence.coverage(fs).items():
-        print(f"{c:14} {s}")
-    print(f"total {len(fs)}")
+    print("\n".join(findings_lines(_kb("team").findings(a.product), a.full)))
 
 
 def _run(product: str, arm: str, seed: int, mode, approver):
@@ -145,7 +164,10 @@ def cmd_eval(a) -> None:
 
 
 def cmd_report(a) -> None:
-    print(report.write(a.run_id))
+    path = report.write(a.run_id)
+    print(path)
+    if a.open:
+        webbrowser.open(path.resolve().as_uri())
 
 
 def main(argv=None) -> None:
@@ -174,6 +196,8 @@ def main(argv=None) -> None:
     s.set_defaults(fn=cmd_constraints)
     s = sub.add_parser("findings")
     s.add_argument("product")
+    s.add_argument("--full", action="store_true",
+                   help="list every finding, not just the coverage counts")
     s.set_defaults(fn=cmd_findings)
     s = sub.add_parser("run")
     s.add_argument("product")
@@ -189,6 +213,7 @@ def main(argv=None) -> None:
     s.set_defaults(fn=cmd_eval)
     s = sub.add_parser("report")
     s.add_argument("run_id")
+    s.add_argument("--open", action="store_true", help="open the report in the default browser")
     s.set_defaults(fn=cmd_report)
     a = ap.parse_args(argv)
     tracing.setup()
